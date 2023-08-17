@@ -70,6 +70,7 @@ class H36M_Dataset(Dataset):
                         num_frames = len(even_list)
                         the_sequence = np.array(the_sequence[even_list, :])
                         the_sequence = torch.from_numpy(the_sequence).float().cuda()
+
                         # remove global rotation and translation
                         the_sequence[:, 0:6] = 0
                         p3d = data_utils.expmap2xyz_torch(the_sequence)

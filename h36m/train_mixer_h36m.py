@@ -31,6 +31,7 @@ def train(model, model_name, args):
     tb_writer = SummaryWriter(log_dir=log_dir)
     print('Save data of the run in: %s'%log_dir)
 
+    # device is provided by the user in the command line
     device = args.dev
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-05)
@@ -41,6 +42,7 @@ def train(model, model_name, args):
 
     train_loss, val_loss, test_loss = [], [], []
 
+    # different dataset classes and different joint dimensions are used for the two loss types
     if args.loss_type == 'mpjpe':
         dataset = H36M_Dataset(args.data_dir, args.input_n,
                         args.output_n, args.skip_rate, split=0)
@@ -52,6 +54,7 @@ def train(model, model_name, args):
                          75, 76, 77, 78, 79, 80, 81, 82, 83, 87, 88, 89, 90, 91, 92])
 
     elif args.loss_type == 'angle':
+        # NOTE: for the angle loss, 48 dimensions are used
         dataset = H36M_Dataset_Angle(args.data_dir, args.input_n, args.output_n, 
                                     args.skip_rate, split=0)
         vald_dataset = H36M_Dataset_Angle(args.data_dir, args.input_n, 
@@ -91,7 +94,9 @@ def train(model, model_name, args):
 
             optimizer.zero_grad()
 
+            # delta_x = whether to predict the difference between 2 frames
             if args.delta_x:
+                # ??? unclear
                 sequences_all = torch.cat((sequences_train, sequences_gt), 1)
                 sequences_all_delta = [
                     sequences_all[:, 1, :] - sequences_all[:, 0, :]]
@@ -103,9 +108,15 @@ def train(model, model_name, args):
                     (sequences_all_delta)).permute(1, 0, 2)
                 sequences_train_delta = sequences_all_delta[:,
                                                             0:args.input_n, :]
+
+                # run the model
                 sequences_predict = model(sequences_train_delta)
+
+                # ??? delta to ground truth?
                 sequences_predict = delta_2_gt(
                     sequences_predict, sequences_train[:, -1, :])
+
+                # calculate mpjpe loss
                 loss = mpjpe_error(sequences_predict, sequences_gt)
 
             elif args.loss_type == 'mpjpe':
@@ -339,12 +350,21 @@ def test_angle(model, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False) # Parameters for mpjpe
-    parser.add_argument('--data_dir', type=str, default='../data_h36m/', help='path to the unziped dataset directories(H36m/AMASS/3DPW)')  
+    parser.add_argument('--data_dir', type=str,
+                        default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
+                        help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
+    parser.add_argument('--root',
+                        default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/runs',
+                        type=str, help='root path for the logging') #'./runs'
+    parser.add_argument('--model_path', type=str,
+                        default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/checkpoints',
+                        help='directory with the models checkpoints ')
+
     parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
     parser.add_argument('--output_n', type=int, default=25, help="number of model's output frames")
     parser.add_argument('--skip_rate', type=int, default=5, choices=[1, 5], help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
     parser.add_argument('--num_worker', default=4, type=int, help='number of workers in the dataloader')
-    parser.add_argument('--root', default='./runs', type=str, help='root path for the logging') #'./runs'
+
 
     parser.add_argument('--activation', default='mish', type=str, required=False) 
     parser.add_argument('--r_se', default=8, type=int, required=False)
@@ -361,11 +381,11 @@ if __name__ == '__main__':
     parser.add_argument('--milestones', type=list, default=[15, 25, 35, 40], help='the epochs after which the learning rate is adjusted by gamma')
     parser.add_argument('--gamma', type=float, default=0.1, help='gamma correction to the learning rate, after reaching the milestone epochs')
     parser.add_argument('--clip_grad', type=float, default=None, help='select max norm to clip gradients')
-    parser.add_argument('--model_path', type=str, default='./checkpoints/h36m', help='directory with the models checkpoints ')
     parser.add_argument('--actions_to_consider', default='all', help='Actions to visualize.Choose either all or a list of actions')
     parser.add_argument('--batch_size_test', type=int, default=256, help='batch size for the test set')
     parser.add_argument('--visualize_from', type=str, default='test', choices=['train', 'val', 'test'], help='choose data split to visualize from(train-val-test)')
     parser.add_argument('--loss_type', type=str, default='mpjpe', choices=['mpjpe', 'angle'])
+    # parser.add_argument('--delta_x', type=bool, default=True, help='predicting the difference between 2 frames')
 
     args = parser.parse_args()
 
@@ -389,7 +409,9 @@ if __name__ == '__main__':
         parser_angle.add_argument('--channels_mlp_dim', default=60, type=int, required=False) 
         parser_angle.add_argument('--regularization', default=0.0, type=float, required=False)
         parser_angle.add_argument('--pose_dim', default=48, type=int, required=False)
-        parser_angle.add_argument('--lr', default=1e-02, type=float, required=False) 
+        parser_angle.add_argument('--lr', default=1e-02, type=float, required=False)
+        parser_angle.add_argument('--delta_x', type=bool, default=False,
+                                  help='predicting the difference between 2 frames')
         args = parser_angle.parse_args()
     
     if args.loss_type == 'angle' and args.delta_x:
