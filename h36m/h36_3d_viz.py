@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.animation as animation
-from datasets.dataset_h36m import Datasets
+# from datasets.dataset_h36m import Datasets
 #from utils.data_utils import define_actions
 
 
