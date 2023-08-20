@@ -362,7 +362,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
     parser.add_argument('--output_n', type=int, default=25, help="number of model's output frames")
-    parser.add_argument('--skip_rate', type=int, default=5, choices=[1, 5], help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
+    parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5], help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
     parser.add_argument('--num_worker', default=4, type=int, help='number of workers in the dataloader')
 
 

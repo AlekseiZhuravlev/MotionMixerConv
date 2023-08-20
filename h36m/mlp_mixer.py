@@ -321,9 +321,6 @@ class MlpMixer(nn.Module):
         # for mpjpe loss, 66 dimensions are used
         # x shape [50, 10, 66]
 
-        print("x shape", x.shape)
-        exit(0)
-
         # pose embedding, input_size -> hidden_dim (66 -> 50)
         x = x.unsqueeze(1) # [50, 1, 10, 66]
         y = self.conv(x) # [50, 50, 10, 1]

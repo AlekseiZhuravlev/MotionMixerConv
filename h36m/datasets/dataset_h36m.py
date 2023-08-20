@@ -63,6 +63,11 @@ class H36M_Dataset(Dataset):
                 if self.split <= 1:
                     for subact in [1, 2]:  # subactions
                         #print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, subact))
+
+                        ###############################################################################
+                        # read action data, convert to xyz, and store in self.p3d
+                        ###############################################################################
+
                         filename = '{0}/S{1}/{2}_{3}.txt'.format(self.path_to_data, subj, action, subact)
                         the_sequence = data_utils.readCSVasFloat(filename)
                         n, d = the_sequence.shape
@@ -75,17 +80,38 @@ class H36M_Dataset(Dataset):
                         the_sequence[:, 0:6] = 0
                         p3d = data_utils.expmap2xyz_torch(the_sequence)
                         # self.p3d[(subj, action, subact)] = p3d.view(num_frames, -1).cpu().data.numpy()
+
+                        # full sequence
+                        # self.p3d[key].shape (1738, 96)
                         self.p3d[key] = p3d.view(num_frames, -1).cpu().data.numpy()
 
+                        ###############################################################################
+                        # find valid frames and store in self.data_idx
+                        # valid frames = indices of start frames of training subsequences
+                        # (e.g. start at frame 7, with seq length 20)
+                        ###############################################################################
+
+                        # possible starting frames
                         valid_frames = np.arange(0, num_frames - seq_len + 1, skip_rate)
 
                         # tmp_data_idx_1 = [(subj, action, subact)] * len(valid_frames)
+
+                        # list of repeated keys, e.g. [7, 7, 7, 7, 7, 7, 7, 7, 7, 7]
                         tmp_data_idx_1 = [key] * len(valid_frames)
+
+                        # possible starting frames
                         tmp_data_idx_2 = list(valid_frames)
+
+                        # list of tuples, e.g. [(7, 0), (7, 10), (7, 20), (7, 30), (7, 40), (7, 50), (7, 60), (7, 70), (7, 80), (7, 90)]
                         self.data_idx.extend(zip(tmp_data_idx_1, tmp_data_idx_2))
                         key += 1
                 else:
                     #print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 1))
+
+                    ###############################################################################
+                    # read subaction_1 data, convert to xyz, and store in self.p3d
+                    ###############################################################################
+
                     filename = '{0}/S{1}/{2}_{3}.txt'.format(self.path_to_data, subj, action, 1)
                     the_sequence1 = data_utils.readCSVasFloat(filename)
                     n, d = the_sequence1.shape
@@ -98,6 +124,10 @@ class H36M_Dataset(Dataset):
                     p3d1 = data_utils.expmap2xyz_torch(the_seq1)
                     # self.p3d[(subj, action, 1)] = p3d1.view(num_frames1, -1).cpu().data.numpy()
                     self.p3d[key] = p3d1.view(num_frames1, -1).cpu().data.numpy()
+
+                    ###############################################################################
+                    # read subaction_2 data, convert to xyz, and store in self.p3d
+                    ###############################################################################
 
                     #print("Reading subject {0}, action {1}, subaction {2}".format(subj, action, 2))
                     filename = '{0}/S{1}/{2}_{3}.txt'.format(self.path_to_data, subj, action, 2)
@@ -117,9 +147,23 @@ class H36M_Dataset(Dataset):
                     # print("action:{}".format(action))
                     # print("subact1:{}".format(num_frames1))
                     # print("subact2:{}".format(num_frames2))
+
+                    ###############################################################################
+                    # find valid frames and store in self.data_idx
+                    ###############################################################################
+
+                    #  creates 128 + 128 sequences of length seq_len with random starting frames
+                    # fs_sel2: [[ 995  996  997 ... 1027 1028 1029]
+                    #  [ 372  373  374 ...  404  405  406]
+                    #  [ 344  345  346 ...  376  377  378]
+                    #  ...
+                    #  [ 460  461  462 ...  492  493  494]
+                    #  [ 957  958  959 ...  989  990  991]
+                    #  [ 464  465  466 ...  496  497  498]] (128, 35)
+                    # shapes: (128, 35), (128, 35)
                     fs_sel1, fs_sel2 = data_utils.find_indices_256(num_frames1, num_frames2, seq_len,
                                                                    input_n=self.in_n)
-
+                    # starting frames of each sequence in fs_sel1 and fs_sel2
                     valid_frames = fs_sel1[:, 0]
                     tmp_data_idx_1 = [key] * len(valid_frames)
                     tmp_data_idx_2 = list(valid_frames)

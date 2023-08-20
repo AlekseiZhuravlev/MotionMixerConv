@@ -126,12 +126,26 @@ def test_pretrained(model,args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False) # Parameters for mpjpe
-    parser.add_argument('--data_dir', type=str, default='../data_h36m/', help='path to the unziped dataset directories(H36m/AMASS/3DPW)')  
+
+    parser.add_argument('--data_dir', type=str,
+                        default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
+                        help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
+    parser.add_argument('--root',
+                        default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/runs',
+                        type=str, help='root path for the logging') #'./runs'
+    parser.add_argument('--model_path', type=str,
+                        default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/checkpoints/h36_3d_25frames_ckpt',
+                        help='directory with the models checkpoints ')
+
+
+    # parser.add_argument('--data_dir', type=str, default='../data_h36m/', help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
     parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
     parser.add_argument('--output_n', type=int, default=25, help="number of model's output frames")
     parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5], help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
     parser.add_argument('--num_worker', default=4, type=int, help='number of workers in the dataloader')
-    parser.add_argument('--root', default='./runs', type=str, help='root path for the logging') #'./runs'
+    # parser.add_argument('--root', default='./runs', type=str, help='root path for the logging') #'./runs'
+    # parser.add_argument('--model_path', type=str, default='./checkpoints/h36m_3d_25frames_ckpt',
+    #                     help='directory with the models checkpoints ')
 
     parser.add_argument('--activation', default='mish', type=str, required=False)  # 'mish', 'gelu'
     parser.add_argument('--r_se', default=8, type=int, required=False)
@@ -148,7 +162,6 @@ if __name__ == '__main__':
     parser.add_argument('--milestones', type=list, default=[15, 25, 35, 40], help='the epochs after which the learning rate is adjusted by gamma')
     parser.add_argument('--gamma', type=float, default=0.1, help='gamma correction to the learning rate, after reaching the milestone epochs')
     parser.add_argument('--clip_grad', type=float, default=None, help='select max norm to clip gradients')
-    parser.add_argument('--model_path', type=str, default='./checkpoints/h36m_3d_25frames_ckpt', help='directory with the models checkpoints ')
     parser.add_argument('--actions_to_consider', default='all', help='Actions to visualize.Choose either all or a list of actions')
     parser.add_argument('--batch_size_test', type=int, default=256, help='batch size for the test set')
     parser.add_argument('--visualize_from', type=str, default='test', choices=['train', 'val', 'test'], help='choose data split to visualize from(train-val-test)')
