@@ -1,41 +1,42 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+from typing import Tuple, List, Union, Optional
 
 
 class MultiChanSELayer(nn.Module):
     """
-        Squeeze-and-Excitation layer for Tensors of Shape [bs, nChan, nTP, dimPosEmb].
-        If nChan = 1, this is equivalent to the original SE-Layer. 
+        Squeeze-and-Excitation layer for Tensors of Shape [bs, conv_nChan, in_nTP, dimPosEmb].
+        If conv_nChan = 1, this is equivalent to the original SE-Layer. 
         Valentin: I am not 100% satisfied with the MotionMixer-Paper at this point: 
         SE-Architectures were originally designed to weight a bunch of channels 
         and not a bunch of time points.
-        TODO: In later experiments, we could set our number of channels (nChan) to
+        TODO: In later experiments, we could set our number of channels (conv_nChan) to
             a value > 1 and apply the SE-Layer as planned by the original SE-paper 
-            authors: I.e.  [bs, nChan, nTP, dimPosEmb] -(squeeze)-> [bs, nChan] 
-            -> [bs, nChan // r] -> [bs, nChan] -> [bs, nChan, 1, 1] -> [bs, nChan, nTP, dimPosEmb]
+            authors: I.e.  [bs, conv_nChan, in_nTP, dimPosEmb] -(squeeze)-> [bs, conv_nChan] 
+            -> [bs, conv_nChan // r] -> [bs, conv_nChan] -> [bs, conv_nChan, 1, 1] -> [bs, conv_nChan, in_nTP, dimPosEmb]
     """
-    def __init__(self, nTP, r=4, use_max_pooling=False):
+    def __init__(self, in_nTP, r=4, use_max_pooling=False):
         super().__init__()
         self.squeezeBlock = nn.AdaptiveAvgPool2d((1,1)) if not use_max_pooling else nn.AdaptiveMaxPool2d((1,1))
         self.excitationBlock = nn.Sequential(
-            nn.Linear(nTP, nTP // r, bias=False),
+            nn.Linear(in_nTP, in_nTP // r, bias=False),
             nn.ReLU(inplace=True),
-            nn.Linear(nTP // r, nTP, bias=False),
+            nn.Linear(in_nTP // r, in_nTP, bias=False),
             nn.Sigmoid()
         )
 
-    def forward(self, x): # Input: [bs, nChan, nTP, dimPosEmb]
-        bs, _, nTP, _ = x.shape # [bs, nChan, nTP, dimPosEmb]
+    def forward(self, x): # Input: [bs, conv_nChan, in_nTP, dimPosEmb]
+        bs, _, in_nTP, _ = x.shape # [bs, conv_nChan, in_nTP, dimPosEmb]
         # Squeeze:
-        y = x.transpose(1, 2) # [bs, nTP, nChan, dimPosEmb]
-        y = self.squeezeBlock(y) # [bs, nTP, 1, 1]
-        y = y.view(bs, nTP) # [bs, nTP]
+        y = x.transpose(1, 2) # [bs, in_nTP, conv_nChan, dimPosEmb]
+        y = self.squeezeBlock(y) # [bs, in_nTP, 1, 1]
+        y = y.view(bs, in_nTP) # [bs, in_nTP]
         # Excitation:
-        y = self.excitationBlock(y) # [bs, nTP]
-        y = y.view(bs, nTP, 1, 1) # [bs, nTP, 1, 1]
-        y = y.transpose(1, 2) # [bs, 1, nTP, 1]
-        return x * y.expand_as(x) # [bs, nChan, nTP, dimPosEmb]
+        y = self.excitationBlock(y) # [bs, in_nTP]
+        y = y.view(bs, in_nTP, 1, 1) # [bs, in_nTP, 1, 1]
+        y = y.transpose(1, 2) # [bs, 1, in_nTP, 1]
+        return x * y.expand_as(x) # [bs, conv_nChan, in_nTP, dimPosEmb]
 
 
 class ConvBlock(nn.Module):
@@ -74,22 +75,25 @@ class MixerBlock(nn.Module):
     """
 
     def __init__(self, 
-                 channels_conv_dim, 
-                 nTP, 
-                 dimPosEmb, 
-                 mode_conv="once",
-                 activation='gelu', 
-                 conv_kernel_shape=(1,3),
-                 conv_stride=(1,1),
-                 conv_padding=(0,1),
-                 regularization=0,
-                 use_se=True, 
-                 r_se=4, 
-                 use_max_pooling=False):
+                 dimPosEmb:int,
+                 in_nTP:int, 
+                 conv_nChan:int,  
+                 conv1_kernel_shape:Tuple[int, int]=(1,3),
+                 conv1_stride:Tuple[int, int]=(1,1),
+                 conv1_padding:Union[Tuple[int, int], None]=None, 
+                 mode_conv:str="twice",
+                 conv2_kernel_shape:Union[Tuple[int, int], None]=None, 
+                 conv2_stride:Union[Tuple[int, int], None]=None,
+                 conv2_padding:Union[Tuple[int, int], None]=None,
+                 activation:str='gelu',
+                 regularization:float=0,
+                 use_se:bool=True, 
+                 r_se:int=4, 
+                 use_max_pooling:bool=False):
         super().__init__()
 
-        self.channels_conv_dim = channels_conv_dim
-        self.nTP = nTP # number of time points
+        self.conv_nChan = conv_nChan
+        self.in_nTP = in_nTP # number of time points
         self.dimPosEmb = dimPosEmb  # dimension of the pose embedding
         self.mode_conv = mode_conv
         # self.conv_kernel_shape = conv_kernel_shape
@@ -97,27 +101,37 @@ class MixerBlock(nn.Module):
         # self.conv_stride = conv_stride
         # self.conv_padding = conv_padding
         # self.conv_padding_transposed = (self.conv_padding[1], self.conv_padding[0])
-        self.conv1 = ConvBlock(batchnorm_dim=self.channels_conv_dim, 
-                               conv_in_chan=self.channels_conv_dim, 
-                               conv_out_chan=self.channels_conv_dim, 
-                               conv_kernel_shape=conv_kernel_shape, 
-                               conv_stride=conv_stride, 
-                               conv_padding=conv_padding,
+        if conv1_padding is None:
+            # Auto-padding
+            conv1_padding = (conv1_kernel_shape[0]//2, conv1_kernel_shape[1]//2)
+        self.conv1 = ConvBlock(batchnorm_dim=self.conv_nChan, 
+                               conv_in_chan=self.conv_nChan, 
+                               conv_out_chan=self.conv_nChan, 
+                               conv_kernel_shape=conv1_kernel_shape, 
+                               conv_stride=conv1_stride, 
+                               conv_padding=conv1_padding,
                                activation=activation,
                                regularization=regularization)
         if use_se:
-            self.se = MultiChanSELayer(self.nTP, r=r_se, use_max_pooling=use_max_pooling)
+            self.se = MultiChanSELayer(self.in_nTP, r=r_se, use_max_pooling=use_max_pooling)
         else:
             self.se = nn.Identity()
         self.LN1 = nn.LayerNorm(self.dimPosEmb)
         
         if mode_conv == "twice":
-            self.conv2 = ConvBlock(batchnorm_dim=self.channels_conv_dim,
-                                conv_in_chan=self.channels_conv_dim,
-                                conv_out_chan=self.channels_conv_dim,
-                                conv_kernel_shape=(conv_kernel_shape[1], conv_kernel_shape[0]),
-                                conv_stride=conv_stride,
-                                conv_padding=(conv_padding[1], conv_padding[0]),
+            if conv2_kernel_shape is None:
+                conv2_kernel_shape = conv1_kernel_shape[::-1]
+            if conv2_stride is None:
+                conv2_stride = conv1_stride[::-1]
+            if conv2_padding is None:
+                # Auto-padding
+                conv2_padding = (conv2_kernel_shape[0]//2, conv2_kernel_shape[1]//2)
+            self.conv2 = ConvBlock(batchnorm_dim=self.conv_nChan,
+                                conv_in_chan=self.conv_nChan,
+                                conv_out_chan=self.conv_nChan,
+                                conv_kernel_shape=conv2_kernel_shape,
+                                conv_stride=conv2_stride,
+                                conv_padding=conv2_padding,
                                 activation=activation,
                                 regularization=regularization)
             self.se2 = self.se
@@ -130,12 +144,12 @@ class MixerBlock(nn.Module):
             raise ValueError("mode_conv %s"%mode_conv +" must be one of 'once' or 'twice'")
 
 
-    def forward(self, x):
+    def forward(self, x:torch.Tensor):
         """
         Forward pass of the MixerBlock
         Args:
         """
-        # shape x [bs, nChan, nTP, dimPosEmb]
+        # shape x [bs, conv_nChan, in_nTP, dimPosEmb]
         y = self.LN1(x)
 
         # this should be the Spatial-Mix part according to the paper. 
@@ -160,42 +174,45 @@ class ConvMixer(nn.Module):
 
 
     def __init__(self, 
-                 num_blocks, 
-                 nTP,
-                 dimPosEmb,
-                 num_out_classes, 
-                 nChan=1,
-                 conv_kernel_shape=(1,3),
-                 conv_stride=(1,1),
-                 conv_padding=(0,1),
-                 outTP=15,
-                 mode_conv="twice",
-                 activation='gelu',
-                 regularization=0, 
-                 numJoints=51, 
-                 use_se=False,
-                 r_se=4, 
-                 use_max_pooling=False):
+                 num_blocks:int, 
+                 dimPosIn:int,
+                 dimPosEmb:int,
+                 dimPosOut:int, 
+                 in_nTP:int,
+                 out_nTP:int,
+                 conv_nChan:int=1,
+                 conv1_kernel_shape:Tuple[int, int]=(1,3),
+                 conv1_stride:Tuple[int, int]=(1,1),
+                 conv1_padding:Union[Tuple[int, int], None]=(0,1), # Implement None-Case (auto-padding)
+                 mode_conv:str="twice",
+                 conv2_kernel_shape:Union[Tuple[int, int], None]=None, # TODO: Implement (None: conv1_kernel_shape^T; else take conv2_kernel_shape)
+                 conv2_stride:Union[Tuple[int, int], None]=None, # TODO: Implement
+                 conv2_padding:Union[Tuple[int, int], None]=None, # TODO: Implement
+                 activation:str='gelu',
+                 regularization:float=0,  
+                 use_se:bool=False,
+                 r_se:int=4, 
+                 use_max_pooling:bool=False):
         
         super().__init__()
-        self.numJoints = numJoints # 51 for h36m, 66 for 3dpw
-        self.num_out_classes = num_out_classes # 48 for h36m, 66 for 3dpw
+        self.dimPosIn = dimPosIn # 51 for h36m, 66 for 3dpw
+        self.dimPosOut = dimPosOut # 48 for h36m, 66 for 3dpw
         self.dimPosEmb = dimPosEmb
         self.num_blocks = num_blocks 
-        self.nTP = nTP
-        self.conv_in = nn.Conv2d(in_channels=1, out_channels=self.dimPosEmb, kernel_size=(1, self.numJoints), stride=1)
-        self.nChan = nChan
-        self.channelUpscaling = nn.Linear(1, self.nChan)
+        self.in_nTP = in_nTP
+        self.conv_in = nn.Conv2d(in_channels=1, out_channels=self.dimPosEmb, kernel_size=(1, self.dimPosIn), stride=1)
+        self.conv_nChan = conv_nChan
+        self.channelUpscaling = nn.Linear(1, self.conv_nChan)
         self.activation = activation
         
-        self.Mixer_Block = nn.ModuleList(MixerBlock(channels_conv_dim = self.nChan, 
-                                                    nTP=self.nTP, 
+        self.Mixer_Block = nn.ModuleList(MixerBlock(conv_nChan = self.conv_nChan, 
+                                                    in_nTP=self.in_nTP, 
                                                     dimPosEmb=self.dimPosEmb, 
                                                     mode_conv=mode_conv,
                                                     activation=activation, 
-                                                    conv_kernel_shape=conv_kernel_shape,
-                                                    conv_stride=conv_stride,
-                                                    conv_padding=conv_padding,
+                                                    conv_kernel_shape=conv1_kernel_shape,
+                                                    conv_stride=conv1_stride,
+                                                    conv_padding=conv1_padding,
                                                     regularization=regularization,
                                                     use_se=use_se, 
                                                     r_se=r_se, 
@@ -205,45 +222,48 @@ class ConvMixer(nn.Module):
         
         self.LN = nn.LayerNorm(self.dimPosEmb)
         
-        self.outTP = outTP
-        self.project_channels = nn.Conv2d(self.nChan, 1, kernel_size=(1,1), stride=1)
-        self.conv_out = nn.Conv1d(in_channels=self.nTP, out_channels=self.outTP, kernel_size=1, stride=1)
-        self.fc_out = nn.Linear(self.dimPosEmb, self.num_out_classes)
+        self.out_nTP = out_nTP
+        self.project_channels = nn.Conv2d(self.conv_nChan, 1, kernel_size=(1,1), stride=1)
+        self.conv_out = nn.Conv1d(in_channels=self.in_nTP, out_channels=self.out_nTP, kernel_size=1, stride=1)
+        self.fc_out = nn.Linear(self.dimPosEmb, self.dimPosOut)
         
 
-    def forward(self, x):
+    def forward(self, x:torch.Tensor):
         """
         """
         # NOTE: for the angle loss, 48 dimensions are used
         # for mpjpe loss, 66 dimensions are used
-        # input x shape [batch_size, nTP, num_joints = 66 or 48]
+        # input x shape [batch_size, in_nTP, num_joints = 66 or 48]
 
-        x = x.unsqueeze(1) # [bs, 1, nTP, numJoints]
-        y = self.conv_in(x) # [bs, dimPosEmb, nTP, 1]
+        ##### Encoding #####
+        x = x.unsqueeze(1) # [bs, 1, in_nTP, dimPosIn]
+        y = self.conv_in(x) # [bs, dimPosEmb, in_nTP, 1]
 
-        y = self.channelUpscaling(y) # [bs, dimPosEmb, nTP, nChan]
-        y = y.transpose(1, 3) # [bs, nChan, nTP, dimPosEmb]
+        y = self.channelUpscaling(y) # [bs, dimPosEmb, in_nTP, conv_nChan]
+        y = y.transpose(1, 3) # [bs, conv_nChan, in_nTP, dimPosEmb]
 
+        ##### Mixer Blocks #####
         for mb in self.Mixer_Block:
-            y = mb(y)  # [bs, nChan, nTP, dimPosEmb]
-        y = self.LN(y) # [bs, nChan, nTP, dimPosEmb]
+            y = mb(y)  # [bs, conv_nChan, in_nTP, dimPosEmb]
+        y = self.LN(y) # [bs, conv_nChan, in_nTP, dimPosEmb]
 
-        y = self.project_channels(y).squeeze(1) # [bs, nTP, dimPosEmb]
-        y = self.conv_out(y) # [bs, outTP, dimPosEmb]
-        y = nn.GELU()(y) # [bs, outTP, dimPosEmb]
-        out = self.fc_out(y) # [bs, outTP, num_out_classes]
+        ##### Decoding #####
+        y = self.project_channels(y).squeeze(1) # [bs, in_nTP, dimPosEmb]
+        y = self.conv_out(y) # [bs, out_nTP, dimPosEmb]
+        y = nn.GELU()(y) # [bs, out_nTP, dimPosEmb]
+        out = self.fc_out(y) # [bs, out_nTP, dimPosOut]
 
-        return out # [bs, outTP, num_out_classes]
+        return out # [bs, out_nTP, dimPosOut]
 
 
 def testOneForwardPass():
     num_blocks = 4
-    nTP = 10
+    in_nTP = 10
     dimPosEmb = 50
     conv_kernel_shape = (1,3)
     conv_stride = (1,1)
     conv_padding = (0,1)
-    outTP = 15
+    out_nTP = 15
     mode_conv = "twice"
     activation = 'gelu'
     regularization = 0
@@ -251,25 +271,25 @@ def testOneForwardPass():
     use_se = True
     r_se = 4
     use_max_pooling = False
-    nChan=2
+    conv_nChan=2
 
     model = ConvMixer(num_blocks=num_blocks,
-                        nTP=nTP,
+                        dimPosIn=numJoints,
                         dimPosEmb=dimPosEmb,
-                        num_out_classes=outTP,
-                        conv_kernel_shape=conv_kernel_shape,
-                        conv_stride=conv_stride,
-                        conv_padding=conv_padding,
-                        outTP=outTP,
+                        dimPosOut=numJoints,
+                        in_nTP=in_nTP,
+                        out_nTP=out_nTP,
+                        conv_nChan=conv_nChan,
+                        conv1_kernel_shape=conv_kernel_shape,
+                        conv1_stride=conv_stride,
+                        conv1_padding=conv_padding,
                         mode_conv=mode_conv,
                         activation=activation,
                         regularization=regularization,
-                        numJoints=numJoints,
                         use_se=use_se,
                         r_se=r_se,
-                        use_max_pooling=use_max_pooling,
-                        nChan=nChan)
-    x = torch.randn(32, nTP, numJoints)
+                        use_max_pooling=use_max_pooling)
+    x = torch.randn(32, in_nTP, numJoints)
     out = model(x)
     print(out.shape)
 
