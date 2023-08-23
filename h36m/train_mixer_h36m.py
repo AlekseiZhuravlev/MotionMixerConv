@@ -5,6 +5,7 @@ from datasets.dataset_h36m_ang import H36M_Dataset_Angle
 from utils.data_utils import define_actions
 from torch.utils.data import DataLoader
 from mlp_mixer import MlpMixer
+from conv_mixer import ConvMixer
 import torch.optim as optim
 import numpy as np
 import argparse
@@ -241,7 +242,7 @@ def test_mpjpe(model, args):
         elif args.loss_type == 'angle':
             dataset_test = H36M_Dataset_Angle(args.data_dir, args.input_n,
                                     args.output_n, args.skip_rate, split=2, actions=[action])
-        print('>>> Test dataset length: {:d}'.format(dataset_test.__len__()))
+        # print('>>> Test dataset length: {:d}'.format(dataset_test.__len__()))
 
         test_loader = DataLoader(dataset_test, batch_size=args.batch_size_test,
                                  shuffle=False, num_workers=0, pin_memory=True)
@@ -350,15 +351,29 @@ def test_angle(model, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False) # Parameters for mpjpe
-    parser.add_argument('--data_dir', type=str,
-                        default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
-                        help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
-    parser.add_argument('--root',
-                        default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/runs',
-                        type=str, help='root path for the logging') #'./runs'
-    parser.add_argument('--model_path', type=str,
-                        default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/checkpoints',
-                        help='directory with the models checkpoints ')
+    user = "v"
+    if user == "a":
+        parser.add_argument('--data_dir', type=str,
+                            default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
+                            help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
+        parser.add_argument('--root',
+                            default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/runs',
+                            type=str, help='root path for the logging') #'./runs'
+        parser.add_argument('--model_path', type=str,
+                            default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/checkpoints',
+                            help='directory with the models checkpoints ')
+    elif user =="v":
+        parser.add_argument('--data_dir', type=str,
+                            default='/home/user/bornhaup/FinalProject/VisionLabSS23_3DPoses',
+                            help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
+        parser.add_argument('--root',
+                            default='/home/user/bornhaup/FinalProject/MotionMixerConv/runs',
+                            type=str, help='root path for the logging') #'./runs'
+        parser.add_argument('--model_path', type=str,
+                            default='/home/user/bornhaup/FinalProject/MotionMixerConv/checkpoints',
+                            help='directory with the models checkpoints ')  
+    else: 
+        raise ValueError('User not defined')
 
     parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
     parser.add_argument('--output_n', type=int, default=25, help="number of model's output frames")
@@ -419,13 +434,41 @@ if __name__ == '__main__':
 
     print(args)
 
-    model = MlpMixer(num_classes=args.pose_dim, num_blocks=args.num_blocks,
-                     hidden_dim=args.hidden_dim, tokens_mlp_dim=args.tokens_mlp_dim,
-                     channels_mlp_dim=args.channels_mlp_dim, seq_len=args.input_n,
-                     pred_len=args.output_n, activation=args.activation,
-                     mlp_block_type='normal', regularization=args.regularization,
-                     input_size=args.pose_dim, initialization='none', r_se=args.r_se,
-                     use_max_pooling=False, use_se=True)
+    # model = MlpMixer(num_classes=args.pose_dim, # Number of input nodes
+    #                  num_blocks=args.num_blocks, # Number of blocks
+    #                  hidden_dim=args.hidden_dim, # dimPosEmb
+    #                  tokens_mlp_dim=args.tokens_mlp_dim, #??
+    #                  channels_mlp_dim=args.channels_mlp_dim, # ?? 
+    #                  seq_len=args.input_n, # nTP
+    #                  pred_len=args.output_n, # out_nTP
+    #                  activation=args.activation, # activation function
+    #                  mlp_block_type='normal',  # mlp_block_type
+    #                  regularization=args.regularization, # regularization
+    #                  input_size=args.pose_dim, # input_size
+    #                  initialization='none', # Not used
+    #                  r_se=args.r_se, # r_se
+    #                  use_max_pooling=False, # use_max_pooling 
+    #                  use_se=True) # use_se
+    
+    model = ConvMixer(num_blocks=args.num_blocks, 
+                 dimPosIn=args.pose_dim,
+                 dimPosEmb=args.hidden_dim,
+                 dimPosOut=args.pose_dim, 
+                 in_nTP=args.input_n,
+                 out_nTP=args.output_n,
+                 conv_nChan=1, # TODO: Implement arg-parsing
+                 conv1_kernel_shape=(1,3), # TODO: Implement arg-parsing
+                 conv1_stride=(1,1), # TODO: Implement arg-parsing
+                 conv1_padding=(0,1), # TODO: Implement arg-parsing
+                 mode_conv="twice", # TODO: Implement arg-parsing
+                 conv2_kernel_shape=None, # TODO: Implement arg-parsing
+                 conv2_stride=None, # TODO: Implement arg-parsing
+                 conv2_padding=None, # TODO: Implement arg-parsing
+                 activation=args.activation,
+                 regularization=args.regularization,  
+                 use_se=True,
+                 r_se=args.r_se, 
+                 use_max_pooling=False)
 
     model = model.to(args.dev)
 
