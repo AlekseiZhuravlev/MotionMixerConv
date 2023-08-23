@@ -70,7 +70,7 @@ class ConvBlock(nn.Module):
         return x
 
 
-class MixerBlock(nn.Module):
+class ConvMixerBlock(nn.Module):
     """
     """
 
@@ -169,7 +169,60 @@ class MixerBlock(nn.Module):
 
 class ConvMixer(nn.Module):
     """
-
+    Overall Convolutional Mixer Model for 3D pose sequences.
+    Args:
+        num_blocks (int): 
+            Number of Mixer Blocks
+        dimPosIn (int): 
+            Dimension of the pose input
+        dimPosEmb (int): 
+            Dimension of the pose embedding
+        dimPosOut (int): 
+            Dimension of the pose output (usually same as dimPosIn)
+        in_nTP (int): 
+            Number of time points in the input (length of the input sequence)
+        out_nTP (int):
+            Number of time points in the output (length of the output sequence)
+        conv_nChan (int) (default=1):
+            Number of channels in the convolutional layers; A feature of the ConvMixer
+        conv1_kernel_shape (Tuple[int, int]) (default=(1,3)):
+            Kernel shape of the first convolutional layer of each ConvBlock
+            For 1D convolutions, choose (1,y), for 2D convolutions, choose (x,y)
+        conv1_stride (Tuple[int, int]) (default=(1,1)):
+            Stride of the first convolutional layer of each ConvBlock
+        conv1_padding (Tuple[int, int]) (default=None):
+            Padding of the first convolutional layer of each ConvBlock
+            If None, the padding is chosen automatically such that the input and output have the same shape
+        mode_conv (str) (default="twice"):
+            Mode of the convolutional layers of each ConvBlock
+            Must be one of "once" or "twice"
+            If "once", only the first convolutional layer is used in each ConvBlock
+            If "twice", both convolutional layers are used in each ConvBlock
+        conv2_kernel_shape (Tuple[int, int]) (default=None):
+            Kernel shape of the second convolutional layer of each ConvBlock
+            For 1D convolutions, choose (y,1), for 2D convolutions, choose (y,x)
+            If None, the kernel shape is chosen automatically (transposed of conv1_kernel_shape)
+        conv2_stride (Tuple[int, int]) (default=None):
+            Stride of the second convolutional layer of each ConvBlock
+            If None: the stride is chosen automatically (equal to conv1_stride)
+        conv2_padding (Tuple[int, int]) (default=None):
+            Padding of the second convolutional layer of each ConvBlock
+            If None: the padding is chosen automatically (equal to conv1_padding)
+        activation (str) (default='gelu'):
+            Activation function of the ConvBlocks
+            Must be one of 'gelu' or 'mish'
+        regularization (float) (default=0):
+            If 0 < regul. ≤ 1: Dropout with probability regularization is applied after each ConvBlock
+            If -1: BatchNorm is applied after each ConvBlock
+            If 0: No regularization is applied
+        use_se (bool) (default=True):
+            If True: Squeeze-and-Excitation layers are applied after each ConvBlock
+            If False: No Squeeze-and-Excitation layers are applied
+        r_se (int) (default=4):
+            Reduction factor of the Squeeze-and-Excitation layers (only used if use_se=True)
+        use_max_pooling (bool) (default=False):
+            If True: Max-Pooling is used in the Squeeze-and-Excitation layers (only used if use_se=True)
+            If False: Average-Pooling is used in the Squeeze-and-Excitation layers (only used if use_se=True)
     """
 
 
@@ -183,7 +236,7 @@ class ConvMixer(nn.Module):
                  conv_nChan:int=1,
                  conv1_kernel_shape:Tuple[int, int]=(1,3),
                  conv1_stride:Tuple[int, int]=(1,1),
-                 conv1_padding:Union[Tuple[int, int], None]=(0,1), 
+                 conv1_padding:Union[Tuple[int, int], None]=None, 
                  mode_conv:str="twice",
                  conv2_kernel_shape:Union[Tuple[int, int], None]=None, 
                  conv2_stride:Union[Tuple[int, int], None]=None, 
@@ -205,7 +258,7 @@ class ConvMixer(nn.Module):
         self.channelUpscaling = nn.Linear(1, self.conv_nChan)
         self.activation = activation
         
-        self.Mixer_Block = nn.ModuleList(MixerBlock(dimPosEmb=self.dimPosEmb,
+        self.Mixer_Block = nn.ModuleList(ConvMixerBlock(dimPosEmb=self.dimPosEmb,
                                                     in_nTP=self.in_nTP,
                                                     conv_nChan = self.conv_nChan, 
                                                     conv1_kernel_shape=conv1_kernel_shape,
@@ -232,10 +285,18 @@ class ConvMixer(nn.Module):
 
     def forward(self, x:torch.Tensor):
         """
+            Forward pass of the ConvMixer
+            NOTE: for the angle loss, 48 dimensions are used
+            # for mpjpe loss, 66 dimensions are used
+
+            Args:
+                x (torch.Tensor): 
+                    Input pose sequence of shape [batch_size, in_nTP, dimPosIn]
+
+            Returns:
+                out (torch.Tensor):
+                    Output pose sequence of shape [batch_size, out_nTP, dimPosOut]
         """
-        # NOTE: for the angle loss, 48 dimensions are used
-        # for mpjpe loss, 66 dimensions are used
-        # input x shape [batch_size, in_nTP, num_joints = 66 or 48]
 
         ##### Encoding #####
         x = x.unsqueeze(1) # [bs, 1, in_nTP, dimPosIn]
