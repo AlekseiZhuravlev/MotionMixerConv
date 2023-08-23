@@ -247,6 +247,7 @@ class ConvMixerBlock(nn.Module):
             self.se2 = self.se
             self.LN2 = nn.LayerNorm(self.dimPosEmb)
         elif mode_conv == "once":
+            # Overwrite conv2, se2 and LN2 with identity to only use conv1, se and LN1
             self.conv2 = nn.Identity()
             self.se2 = nn.Identity()
             self.LN2 = nn.Identity()
@@ -264,21 +265,20 @@ class ConvMixerBlock(nn.Module):
             y (torch.Tensor):
                 Output pose sequence of shape [batch_size, conv_nChan, in_nTP, dimPosEmb]
         """
-        # shape x [bs, conv_nChan, in_nTP, dimPosEmb]
-        y = self.LN1(x)
+        ##### First ConvBlock #####
+        y = self.LN1(x) # [bs, conv_nChan, in_nTP, dimPosEmb]
+        y = self.conv1(y) # [bs, conv_nChan, in_nTP, dimPosEmb]
+        y = self.se(y) # [bs, conv_nChan, in_nTP, dimPosEmb]
 
-        # this should be the Spatial-Mix part according to the paper. 
-        y = self.conv1(y)
+        ##### Residual Connection #####
+        x = x + y # [bs, conv_nChan, in_nTP, dimPosEmb]
+
+        ##### Second ConvBlock #####
+        y = self.LN2(x) # [bs, conv_nChan, in_nTP, dimPosEmb]
+        y = self.conv2(y) # [bs, conv_nChan, in_nTP, dimPosEmb]
+        y = self.se(y) # [bs, conv_nChan, in_nTP, dimPosEmb]
         
-        y = self.se(y)
-        x = x + y
-
-        # this should be the Temporal-Mix part according to the paper. 
-        y = self.LN2(x)
-        y = self.conv2(y) 
-          
-        y = self.se(y)
-            
+        ##### Residual Connection #####
         return x + y
 
 
@@ -348,19 +348,19 @@ class ConvMixer(nn.Module):
                  dimPosOut:int, 
                  in_nTP:int,
                  out_nTP:int,
-                 conv_nChan:int=1,
-                 conv1_kernel_shape:Tuple[int, int]=(1,3),
-                 conv1_stride:Tuple[int, int]=(1,1),
-                 conv1_padding:Union[Tuple[int, int], None]=None, 
-                 mode_conv:str="twice",
-                 conv2_kernel_shape:Union[Tuple[int, int], None]=None, 
-                 conv2_stride:Union[Tuple[int, int], None]=None, 
-                 conv2_padding:Union[Tuple[int, int], None]=None, 
-                 activation:str='gelu',
-                 regularization:float=0,  
-                 use_se:bool=False,
-                 r_se:int=4, 
-                 use_max_pooling:bool=False):
+                 conv_nChan:int = 1,
+                 conv1_kernel_shape:Tuple[int, int] = (1,3),
+                 conv1_stride:Tuple[int, int] = (1,1),
+                 conv1_padding:Union[Tuple[int, int], None] = None, 
+                 mode_conv:str = "twice",
+                 conv2_kernel_shape:Union[Tuple[int, int], None] = None, 
+                 conv2_stride:Union[Tuple[int, int], None] = None, 
+                 conv2_padding:Union[Tuple[int, int], None] = None, 
+                 activation:str = 'gelu',
+                 regularization:float =0,  
+                 use_se:bool = False,
+                 r_se:int = 4, 
+                 use_max_pooling:bool = False):
         
         super().__init__()
         self.dimPosIn = dimPosIn # 51 for h36m, 66 for 3dpw
@@ -373,22 +373,23 @@ class ConvMixer(nn.Module):
         self.channelUpscaling = nn.Linear(1, self.conv_nChan)
         self.activation = activation
         
-        self.Mixer_Block = nn.ModuleList(ConvMixerBlock(dimPosEmb=self.dimPosEmb,
-                                                    in_nTP=self.in_nTP,
-                                                    conv_nChan = self.conv_nChan, 
-                                                    conv1_kernel_shape=conv1_kernel_shape,
-                                                    conv1_stride=conv1_stride,
-                                                    conv1_padding=conv1_padding,
-                                                    mode_conv=mode_conv,
-                                                    conv2_kernel_shape=conv2_kernel_shape,
-                                                    conv2_stride=conv2_stride,
-                                                    conv2_padding=conv2_padding,
-                                                    activation=activation,
-                                                    regularization=regularization,
-                                                    use_se=use_se, 
-                                                    r_se=r_se, 
-                                                    use_max_pooling=use_max_pooling) 
-                                                        for _ in range(num_blocks))
+        self.Mixer_Block = nn.ModuleList(
+            ConvMixerBlock(dimPosEmb=self.dimPosEmb,
+                           in_nTP=self.in_nTP,
+                           conv_nChan = self.conv_nChan, 
+                           conv1_kernel_shape=conv1_kernel_shape,
+                           conv1_stride=conv1_stride,
+                           conv1_padding=conv1_padding,
+                           mode_conv=mode_conv,
+                           conv2_kernel_shape=conv2_kernel_shape,
+                           conv2_stride=conv2_stride,
+                           conv2_padding=conv2_padding,
+                           activation=activation,
+                           regularization=regularization,
+                           use_se=use_se, 
+                           r_se=r_se, 
+                           use_max_pooling=use_max_pooling) 
+            for _ in range(num_blocks))
         
         self.LN = nn.LayerNorm(self.dimPosEmb)
         
