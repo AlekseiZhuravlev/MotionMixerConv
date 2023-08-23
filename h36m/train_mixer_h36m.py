@@ -1,5 +1,9 @@
 import torch
 import os
+
+import sys
+sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv/h36m')
+
 from datasets.dataset_h36m import H36M_Dataset
 from datasets.dataset_h36m_ang import H36M_Dataset_Angle
 from utils.data_utils import define_actions
@@ -28,7 +32,13 @@ def get_log_dir(out_dir):
 
 def train(model, model_name, args):
 
-    log_dir = get_log_dir(args.root)
+    # log_dir = get_log_dir(args.root)
+    log_dir = os.path.join(args.save_path, model_name)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    else:
+        raise ValueError('The directory already exists. Please, change the name of the model')
+
     tb_writer = SummaryWriter(log_dir=log_dir)
     print('Save data of the run in: %s'%log_dir)
 
@@ -203,10 +213,14 @@ def train(model, model_name, args):
         tb_writer.add_scalar('loss/test', test_loss[-1].item(), epoch)
 
         torch.save(model.state_dict(), os.path.join(log_dir, 'model.pt'))
-        # TODO write something to save the best model
-        if (epoch+1)%1==0:
-            print('----saving model-----')
-            torch.save(model.state_dict(),os.path.join(args.model_path,model_name))
+
+
+        # if (epoch+1)%1==0:
+        #     print('----saving model-----')
+        #     torch.save(model.state_dict(),os.path.join(args.model_path,model_name))
+
+    # (Aleksei) return the losses for optuna, lists of all losses
+    return train_loss, val_loss, test_loss
 
 
 def test_mpjpe(model, args):
@@ -350,6 +364,8 @@ def test_angle(model, args):
 
 
 if __name__ == '__main__':
+    raise ValueError('This script is not supposed to be run directly. Use optuna_main.py instead.')
+
     parser = argparse.ArgumentParser(add_help=False) # Parameters for mpjpe
     user = "v"
     if user == "a":
