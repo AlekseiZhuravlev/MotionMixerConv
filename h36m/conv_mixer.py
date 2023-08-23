@@ -15,8 +15,22 @@ class MultiChanSELayer(nn.Module):
             a value > 1 and apply the SE-Layer as planned by the original SE-paper 
             authors: I.e.  [bs, conv_nChan, in_nTP, dimPosEmb] -(squeeze)-> [bs, conv_nChan] 
             -> [bs, conv_nChan // r] -> [bs, conv_nChan] -> [bs, conv_nChan, 1, 1] -> [bs, conv_nChan, in_nTP, dimPosEmb]
+
+        Args:
+            in_nTP (int):
+                Number of time points in the input (length of the input sequence)
+            r (int):
+                Reduction factor of the Squeeze-and-Excitation layers
+                The number of channels is reduced by a factor of ≈ 1/r
+            use_max_pooling (bool) (default=False):
+                If True: Max-Pooling is used in the Squeeze-and-Excitation layers
+                If False: Average-Pooling is used in the Squeeze-and-Excitation layers
     """
-    def __init__(self, in_nTP, r=4, use_max_pooling=False):
+    def __init__(self, 
+                 in_nTP:int, 
+                 r:int = 4, 
+                 use_max_pooling:bool = False):
+        
         super().__init__()
         self.squeezeBlock = nn.AdaptiveAvgPool2d((1,1)) if not use_max_pooling else nn.AdaptiveMaxPool2d((1,1))
         self.excitationBlock = nn.Sequential(
@@ -26,7 +40,16 @@ class MultiChanSELayer(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x): # Input: [bs, conv_nChan, in_nTP, dimPosEmb]
+    def forward(self, x:torch.tensor): # Input: [bs, conv_nChan, in_nTP, dimPosEmb]
+        """
+            Forward pass of the Squeeze-and-Excitation layer
+            Args:
+                x (torch.Tensor):
+                    Input pose sequence of shape [batch_size, conv_nChan, in_nTP, dimPosEmb]
+            Returns:
+                y (torch.Tensor):
+                    Output pose sequence of shape [batch_size, conv_nChan, in_nTP, dimPosEmb]
+        """
         bs, _, in_nTP, _ = x.shape # [bs, conv_nChan, in_nTP, dimPosEmb]
         # Squeeze:
         y = x.transpose(1, 2) # [bs, in_nTP, conv_nChan, dimPosEmb]
@@ -41,9 +64,41 @@ class MultiChanSELayer(nn.Module):
 
 class ConvBlock(nn.Module):
     """
+        Convolutional Block for 3D pose sequences.
+        Args:
+            batchnorm_dim (int):
+                Dimension of the batchnorm layer
+            conv_in_chan (int):
+                Number of input channels of the convolutional layer
+            conv_out_chan (int):
+                Number of output channels of the convolutional layer
+                In general, conv_out_chan = conv_in_chan = conv_nChan = batchnorm_dim
+            conv_kernel_shape (Tuple[int, int]):
+                Kernel shape of the convolutional layer
+                For 1D convolutions, choose (1,y), for 2D convolutions, choose (x,y)
+            conv_stride (Tuple[int, int]):
+                Stride of the convolutional layer
+            conv_padding (Tuple[int, int]):
+                Padding of the convolutional layer
+                If None, the padding is chosen automatically such that the input and output have the same shape
+            activation (str):
+                Activation function of the ConvBlock
+                Must be one of 'gelu' or 'mish'
+            regularization (float):
+                If 0 < regul. ≤ 1: Dropout with probability regularization is applied after each ConvBlock
+                If -1: BatchNorm is applied after each ConvBlock
+                If 0: No regularization is applied
     """
 
-    def __init__(self, batchnorm_dim, conv_in_chan=1, conv_out_chan=1, conv_kernel_shape=(1,3), conv_stride=(1,1), conv_padding=(0,1), activation='gelu', regularization=0):
+    def __init__(self, 
+                 batchnorm_dim:int, 
+                 conv_in_chan:int=1, 
+                 conv_out_chan:int=1, 
+                 conv_kernel_shape:Tuple[int, int]=(1,3), 
+                 conv_stride:Tuple[int, int]=(1,1), 
+                 conv_padding:Tuple[int, int]=(0,1), 
+                 activation:str='gelu', 
+                 regularization:float=0.0):
         super().__init__()
         self.bn_dim = batchnorm_dim
         self.conv = nn.Conv2d(conv_in_chan, conv_out_chan, conv_kernel_shape, stride=conv_stride, padding=conv_padding)
@@ -64,6 +119,15 @@ class ConvBlock(nn.Module):
                     
 
     def forward(self, x):
+        """
+            Forward pass of the ConvBlock
+            Args:
+                x (torch.Tensor):
+                    Input pose sequence of shape [batch_size, conv_in_chan, in_nTP, dimPosEmb]
+            Returns:
+                y (torch.Tensor):
+                    Output pose sequence of shape [batch_size, conv_out_chan, in_nTP, dimPosEmb]
+        """
         x = self.conv(x)
         x = self.act(x)
         x = self.reg(x)
@@ -72,6 +136,52 @@ class ConvBlock(nn.Module):
 
 class ConvMixerBlock(nn.Module):
     """
+        Convolutional Mixer Block for 3D pose sequences.
+        Args:
+            dimPosEmb (int):
+                Dimension of the pose embedding
+            in_nTP (int):
+                Number of time points in the input (length of the input sequence)
+            conv_nChan (int) (default=1):
+                Number of channels in the convolutional layers; A feature of the ConvMixer
+            conv1_kernel_shape (Tuple[int, int]) (default=(1,3)):
+                Kernel shape of the first convolutional layer of each ConvBlock
+                For 1D convolutions, choose (1,y), for 2D convolutions, choose (x,y)
+            conv1_stride (Tuple[int, int]) (default=(1,1)):
+                Stride of the first convolutional layer of each ConvBlock
+            conv1_padding (Tuple[int, int]) (default=None):
+                Padding of the first convolutional layer of each ConvBlock
+                If None, the padding is chosen automatically such that the input and output have the same shape
+            mode_conv (str) (default="twice"):
+                Mode of the convolutional layers of each ConvBlock
+                Must be one of "once" or "twice"
+                If "once", only the first convolutional layer is used in each ConvBlock
+                If "twice", both convolutional layers are used in each ConvBlock
+            conv2_kernel_shape (Tuple[int, int]) (default=None):
+                Kernel shape of the second convolutional layer of each ConvBlock
+                For 1D convolutions, choose (y,1), for 2D convolutions, choose (y,x)
+                If None, the kernel shape is chosen automatically (transposed of conv1_kernel_shape)
+            conv2_stride (Tuple[int, int]) (default=None):
+                Stride of the second convolutional layer of each ConvBlock
+                If None: the stride is chosen automatically (equal to conv1_stride)
+            conv2_padding (Tuple[int, int]) (default=None):
+                Padding of the second convolutional layer of each ConvBlock
+                If None: the padding is chosen automatically (equal to conv1_padding)
+            activation (str) (default='gelu'):
+                Activation function of the ConvBlocks
+                Must be one of 'gelu' or 'mish'
+            regularization (float) (default=0):
+                If 0 < regul. ≤ 1: Dropout with probability regularization is applied after each ConvBlock
+                If -1: BatchNorm is applied after each ConvBlock
+                If 0: No regularization is applied
+            use_se (bool) (default=True):
+                If True: Squeeze-and-Excitation layers are applied after each ConvBlock
+                If False: No Squeeze-and-Excitation layers are applied
+            r_se (int) (default=4):
+                Reduction factor of the Squeeze-and-Excitation layers (only used if use_se=True)
+            use_max_pooling (bool) (default=False):
+                If True: Max-Pooling is used in the Squeeze-and-Excitation layers (only used if use_se=True)
+                If False: Average-Pooling is used in the Squeeze-and-Excitation layers (only used if use_se=True)
     """
 
     def __init__(self, 
@@ -148,6 +258,11 @@ class ConvMixerBlock(nn.Module):
         """
         Forward pass of the MixerBlock
         Args:
+            x (torch.Tensor):
+                Input pose sequence of shape [batch_size, conv_nChan, in_nTP, dimPosEmb]
+        Returns:
+            y (torch.Tensor):
+                Output pose sequence of shape [batch_size, conv_nChan, in_nTP, dimPosEmb]
         """
         # shape x [bs, conv_nChan, in_nTP, dimPosEmb]
         y = self.LN1(x)
