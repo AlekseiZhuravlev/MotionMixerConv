@@ -214,14 +214,18 @@ class Objective:
         # I am not sure if this is necessary
         # test_loss_final = train_mixer_h36m.test_mpjpe(model, args)
 
-        # we will optimize val_loss
+        # IMPORTANT: we will optimize val_loss, and report train_loss and test_loss
+        trial.set_user_attr("train_loss", train_loss_list[-1].item())
+        trial.set_user_attr("val_loss", val_loss_list[-1].item())
+        trial.set_user_attr("test_loss", test_loss_list[-1].item())
+
         return val_loss_list[-1].item()
 
 
 if __name__ == '__main__':
 
     base_folder = f'/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies'
-    study_name = 'example-study'
+    study_name = 'example-study-train-test-loss'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):
@@ -234,12 +238,13 @@ if __name__ == '__main__':
         study_name=study_name,
         storage=f"sqlite:///{base_folder}/{study_name}/results.db",
     )
+    # To use the dashboard, run the following command:
     # optuna-dashboard sqlite:////home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies/example-study/results.db
 
     study.optimize(
         Objective(f'{base_folder}/{study_name}'),
         # direction="minimize",
-        n_trials=5
+        n_trials=2
     )
     print('Number of finished trials:', len(study.trials))
     print(study.best_params)
