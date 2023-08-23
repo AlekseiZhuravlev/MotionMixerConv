@@ -183,11 +183,11 @@ class ConvMixer(nn.Module):
                  conv_nChan:int=1,
                  conv1_kernel_shape:Tuple[int, int]=(1,3),
                  conv1_stride:Tuple[int, int]=(1,1),
-                 conv1_padding:Union[Tuple[int, int], None]=(0,1), # Implement None-Case (auto-padding)
+                 conv1_padding:Union[Tuple[int, int], None]=(0,1), 
                  mode_conv:str="twice",
-                 conv2_kernel_shape:Union[Tuple[int, int], None]=None, # TODO: Implement (None: conv1_kernel_shape^T; else take conv2_kernel_shape)
-                 conv2_stride:Union[Tuple[int, int], None]=None, # TODO: Implement
-                 conv2_padding:Union[Tuple[int, int], None]=None, # TODO: Implement
+                 conv2_kernel_shape:Union[Tuple[int, int], None]=None, 
+                 conv2_stride:Union[Tuple[int, int], None]=None, 
+                 conv2_padding:Union[Tuple[int, int], None]=None, 
                  activation:str='gelu',
                  regularization:float=0,  
                  use_se:bool=False,
@@ -205,20 +205,22 @@ class ConvMixer(nn.Module):
         self.channelUpscaling = nn.Linear(1, self.conv_nChan)
         self.activation = activation
         
-        self.Mixer_Block = nn.ModuleList(MixerBlock(conv_nChan = self.conv_nChan, 
-                                                    in_nTP=self.in_nTP, 
-                                                    dimPosEmb=self.dimPosEmb, 
+        self.Mixer_Block = nn.ModuleList(MixerBlock(dimPosEmb=self.dimPosEmb,
+                                                    in_nTP=self.in_nTP,
+                                                    conv_nChan = self.conv_nChan, 
+                                                    conv1_kernel_shape=conv1_kernel_shape,
+                                                    conv1_stride=conv1_stride,
+                                                    conv1_padding=conv1_padding,
                                                     mode_conv=mode_conv,
-                                                    activation=activation, 
-                                                    conv_kernel_shape=conv1_kernel_shape,
-                                                    conv_stride=conv1_stride,
-                                                    conv_padding=conv1_padding,
+                                                    conv2_kernel_shape=conv2_kernel_shape,
+                                                    conv2_stride=conv2_stride,
+                                                    conv2_padding=conv2_padding,
+                                                    activation=activation,
                                                     regularization=regularization,
                                                     use_se=use_se, 
                                                     r_se=r_se, 
                                                     use_max_pooling=use_max_pooling) 
                                                         for _ in range(num_blocks))
-            
         
         self.LN = nn.LayerNorm(self.dimPosEmb)
         
