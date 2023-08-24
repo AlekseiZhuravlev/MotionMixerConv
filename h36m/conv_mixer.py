@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, List, Union, Optional
+import encoding.positional_encoder as positional_encoder
 
 
 class MultiChanSELayer(nn.Module):
@@ -339,7 +340,10 @@ class ConvMixer(nn.Module):
             Reduction factor of the Squeeze-and-Excitation layers (only used if use_se=True)
         use_max_pooling (bool) (default=False):
             If True: Max-Pooling is used in the Squeeze-and-Excitation layers (only used if use_se=True)
-            If False: Average-Pooling is used in the Squeeze-and-Excitation layers (only used if use_se=True)
+            If False: Average-Pooling is used in the Squeeze-and-Excitation layers (only used if use_se=True),
+        encoder_n_harmonic_functions (int):
+            Number of harmonic functions to use in the pose encoder
+            If <= 0, do not use harmonic embedding
     """
 
 
@@ -362,7 +366,9 @@ class ConvMixer(nn.Module):
                  regularization:float =0,  
                  use_se:bool = False,
                  r_se:int = 4, 
-                 use_max_pooling:bool = False):
+                 use_max_pooling:bool = False,
+                 encoder_n_harmonic_functions:int = 64,
+                 ):
         
         super().__init__()
         self.dimPosIn = dimPosIn # 51 for h36m, 66 for 3dpw
@@ -370,10 +376,20 @@ class ConvMixer(nn.Module):
         self.dimPosEmb = dimPosEmb
         self.num_blocks = num_blocks 
         self.in_nTP = in_nTP
-        self.conv_in = nn.Conv2d(in_channels=1, out_channels=self.dimPosEmb, kernel_size=(1, self.dimPosIn), stride=1)
         self.conv_nChan = conv_nChan
-        self.channelUpscaling = nn.Linear(1, self.conv_nChan)
         self.activation = activation
+
+        # self.conv_in = nn.Conv2d(in_channels=1, out_channels=self.dimPosEmb, kernel_size=(1, self.dimPosIn), stride=1)
+        # self.channelUpscaling = nn.Linear(1, self.conv_nChan)
+
+        self.encoder = positional_encoder.PoseEncoder(
+            dimPosIn=self.dimPosIn,
+            in_nTP=self.in_nTP,
+            dimPosEmb=self.dimPosEmb,
+            conv_nChan=self.conv_nChan,
+            n_harmonic_functions=encoder_n_harmonic_functions,
+            omega0=0.1
+        )
         
         self.Mixer_Block = nn.ModuleList(
             ConvMixerBlock(dimPosEmb=self.dimPosEmb,
@@ -417,11 +433,13 @@ class ConvMixer(nn.Module):
         """
 
         ##### Encoding #####
-        x = x.unsqueeze(1) # [bs, 1, in_nTP, dimPosIn]
-        y = self.conv_in(x) # [bs, dimPosEmb, in_nTP, 1]
+        # x = x.unsqueeze(1) # [bs, 1, in_nTP, dimPosIn]
+        # y = self.conv_in(x) # [bs, dimPosEmb, in_nTP, 1]
+        #
+        # y = self.channelUpscaling(y) # [bs, dimPosEmb, in_nTP, conv_nChan]
+        # y = y.transpose(1, 3) # [bs, conv_nChan, in_nTP, dimPosEmb]
 
-        y = self.channelUpscaling(y) # [bs, dimPosEmb, in_nTP, conv_nChan]
-        y = y.transpose(1, 3) # [bs, conv_nChan, in_nTP, dimPosEmb]
+        y = self.encoder(x) # [bs, conv_nChan, in_nTP, dimPosEmb]
 
         ##### Mixer Blocks #####
         for mb in self.Mixer_Block:
@@ -453,6 +471,7 @@ def testOneForwardPass():
     r_se = 4
     use_max_pooling = False
     conv_nChan=2
+    encoder_n_harmonic_functions = 64
 
     model = ConvMixer(num_blocks=num_blocks,
                         dimPosIn=numJoints,
@@ -469,7 +488,9 @@ def testOneForwardPass():
                         regularization=regularization,
                         use_se=use_se,
                         r_se=r_se,
-                        use_max_pooling=use_max_pooling)
+                        use_max_pooling=use_max_pooling,
+                        encoder_n_harmonic_functions=encoder_n_harmonic_functions
+                      )
     x = torch.randn(32, in_nTP, numJoints)
     out = model(x)
     print(out.shape)
