@@ -17,6 +17,33 @@ def criterion_cos2(input_f, target_f):
     return cos(input_f, target_f)
 
 
+def pck(predictions, targets, thresh):
+    """
+    Percentage of correct keypoints.
+    Args:
+        predictions: np array of predicted 3D joint positions in format (..., n_joints, 3)
+        targets: np array of same shape as `predictions`
+        thresh: radius within which a predicted joint has to lie.
+
+    Returns:
+        Percentage of correct keypoints at the given threshold level, stored in a np array of shape (..., len(threshs))
+
+    """
+    dist = torch.sqrt(torch.sum((predictions - targets) ** 2, axis=-1))
+    pck = torch.mean((dist <= thresh).float())
+    return pck
+
+def auc_pck_metric(predictions, targets):
+    # calculate area under curve for pck, thresholds are 0.001 - 0.3
+    threshs = np.arange(0.001, 0.3, 0.001)
+    pck_values = []
+    for thresh in threshs:
+        pck_values.append(pck(predictions, targets, thresh))
+    pck_values = torch.stack(pck_values, dim=-1)
+    auc = torch.trapz(pck_values, dx=0.001, axis=-1) / 0.299
+
+    return auc
+
 
 def mpjpe_error(batch_pred,batch_gt): 
     
@@ -25,6 +52,9 @@ def mpjpe_error(batch_pred,batch_gt):
 
     return torch.mean(torch.norm(batch_gt-batch_pred,2,1))
 
+def joint_angle_error(ang_pred, ang_gt):
+    mean_error = torch.mean(torch.norm(ang_gt - ang_pred, dim=-1))
+    return mean_error
 
 def euler_error(ang_pred, ang_gt):
     # only for 32 joints
@@ -171,7 +201,18 @@ def mask_joints (seq,mjoints):
         
     return seq_masked
     
-    
+if __name__ == '__main__':
+    import sklearn
+
+    from sklearn.datasets import load_breast_cancer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import roc_auc_score
+
+    y = [0.3, 1.0]
+    y_pred = [0.2, 0.8]
+    print(roc_auc_score(y, y_pred, max_fpr=0.25))
+
+
     
     
     

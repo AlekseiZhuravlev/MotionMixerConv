@@ -209,7 +209,7 @@ class Objective:
         # Train and evaluate model
         ############################################################################
 
-        train_loss_list, val_loss_list, test_loss_list = train_mixer_h36m.train(model, model_name, args)
+        train_loss_list, val_loss_list, test_loss_list, metrics_dict = train_mixer_h36m.train(model, model_name, args)
 
         # I am not sure if this is necessary
         # test_loss_final = train_mixer_h36m.test_mpjpe(model, args)
@@ -219,13 +219,16 @@ class Objective:
         trial.set_user_attr("val_loss", val_loss_list[-1].item())
         trial.set_user_attr("test_loss", test_loss_list[-1].item())
 
+        for metric_name, metric_value in metrics_dict.items():
+            trial.set_user_attr(metric_name, metric_value[-1].item())
+
         return val_loss_list[-1].item()
 
 
 if __name__ == '__main__':
 
     base_folder = f'/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies'
-    study_name = 'example-study-train-test-loss'
+    study_name = 'example-study_train-test-loss_metrics'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):

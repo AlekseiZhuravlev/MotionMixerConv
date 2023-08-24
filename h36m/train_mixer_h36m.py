@@ -13,7 +13,7 @@ from conv_mixer import ConvMixer
 import torch.optim as optim
 import numpy as np
 import argparse
-from utils.utils_mixer import delta_2_gt, mpjpe_error, euler_error
+from utils.utils_mixer import delta_2_gt, mpjpe_error, euler_error, auc_pck_metric, joint_angle_error
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
@@ -37,7 +37,7 @@ def train(model, model_name, args):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     else:
-        raise ValueError('The directory already exists. Please, change the name of the model')
+        raise ValueError('The directory already exists. Please, change the name of the model', log_dir)
 
     tb_writer = SummaryWriter(log_dir=log_dir)
     print('Save data of the run in: %s'%log_dir)
@@ -82,6 +82,10 @@ def train(model, model_name, args):
     vald_loader = DataLoader(vald_dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=args.num_worker, pin_memory=True)
 
+    if args.loss_type == 'mpjpe':
+        metrics = {'auc_pck': [], 'mpjpe': []}
+    elif args.loss_type == 'angle':
+        metrics = {'joint_angle': [], 'euler_angle': []}
     
     for epoch in range(args.n_epochs):
         print('Run epoch: %i'%epoch)
@@ -204,23 +208,34 @@ def train(model, model_name, args):
             scheduler.step()
 
         if args.loss_type == 'mpjpe':
-            test_loss.append(test_mpjpe(model, args))
+            test_mpjpe_loss, test_auc_pck = test_mpjpe(model, args)
+
+            metrics['auc_pck'].append(test_auc_pck)
+            metrics['mpjpe'].append(test_mpjpe_loss)
+
+            test_loss.append(test_mpjpe_loss)
         elif args.loss_type == 'angle':
-            test_loss.append(test_angle(model, args))
+            test_euler_angle_loss, test_joint_angle_loss = test_angle(model, args)
+            test_loss.append(test_euler_angle_loss)
+
+            metrics['joint_angle'].append(test_joint_angle_loss)
+            metrics['euler_angle'].append(test_euler_angle_loss)
 
         tb_writer.add_scalar('loss/train', train_loss[-1].item(), epoch)
         tb_writer.add_scalar('loss/val', val_loss[-1].item(), epoch)
         tb_writer.add_scalar('loss/test', test_loss[-1].item(), epoch)
 
+        if args.loss_type == 'mpjpe':
+            tb_writer.add_scalar('metrics/auc_pck', metrics['auc_pck'][-1], epoch)
+            tb_writer.add_scalar('metrics/mpjpe', metrics['mpjpe'][-1], epoch)
+        elif args.loss_type == 'angle':
+            tb_writer.add_scalar('metrics/joint_angle', metrics['joint_angle'][-1], epoch)
+            tb_writer.add_scalar('metrics/euler_angle', metrics['euler_angle'][-1], epoch)
+
         torch.save(model.state_dict(), os.path.join(log_dir, 'model.pt'))
 
-
-        # if (epoch+1)%1==0:
-        #     print('----saving model-----')
-        #     torch.save(model.state_dict(),os.path.join(args.model_path,model_name))
-
     # (Aleksei) return the losses for optuna, lists of all losses
-    return train_loss, val_loss, test_loss
+    return train_loss, val_loss, test_loss, metrics
 
 
 def test_mpjpe(model, args):
@@ -248,6 +263,8 @@ def test_mpjpe(model, args):
         (joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2))
 
     for action in actions:
+
+        auc_pck_running = 0
         running_loss = 0
         n = 0
         if args.loss_type == 'mpjpe':
@@ -312,12 +329,19 @@ def test_mpjpe(model, args):
             loss = mpjpe_error(all_joints_seq.view(-1, args.output_n, 32, 3),
                                all_joints_seq_gt.view(-1, args.output_n, 32, 3))
 
+            auc_pck_batch = auc_pck_metric(
+                all_joints_seq.view(-1, args.output_n, 32, 3),
+                all_joints_seq_gt.view(-1, args.output_n, 32, 3)
+            )
+
+            auc_pck_running += auc_pck_batch*batch_dim
             running_loss += loss*batch_dim
             accum_loss += loss*batch_dim
 
         n_batches += n
     print('overall average loss in mm is: %f'%(accum_loss/n_batches))
-    return accum_loss/n_batches
+    print('auc_pck is:', auc_pck_running/n_batches)
+    return accum_loss/n_batches, auc_pck_running/n_batches
 
 
 def test_angle(model, args):
@@ -332,6 +356,8 @@ def test_angle(model, args):
                             86])
 
     for action in actions:
+
+        joint_angle_error_running = 0
         running_loss=0
         n=0
         dataset_test = H36M_Dataset_Angle(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=2,actions=[action])
@@ -354,25 +380,27 @@ def test_angle(model, args):
                 all_joints_seq[:,:,dim_used] = sequences_predict
                 loss=euler_error(all_joints_seq,sequences_gt)
 
+                joint_angle_error_running += joint_angle_error(all_joints_seq,sequences_gt) * batch_dim
                 running_loss+=loss*batch_dim
                 accum_loss+=loss*batch_dim
 
         n_batches+=n
     print('overall average loss in euler angle is: '+str(accum_loss/n_batches))
+    print('joint angle error is:', joint_angle_error_running/n_batches)
     
-    return accum_loss/n_batches
+    return accum_loss/n_batches, joint_angle_error_running/n_batches
 
 
 if __name__ == '__main__':
-    raise ValueError('This script is not supposed to be run directly. Use optuna_main.py instead.')
+    # raise ValueError('This script is not supposed to be run directly. Use optuna_main.py instead.')
 
     parser = argparse.ArgumentParser(add_help=False) # Parameters for mpjpe
-    user = "v"
+    user = "a"
     if user == "a":
         parser.add_argument('--data_dir', type=str,
                             default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
                             help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
-        parser.add_argument('--root',
+        parser.add_argument('--save_path',
                             default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/runs',
                             type=str, help='root path for the logging') #'./runs'
         parser.add_argument('--model_path', type=str,
@@ -400,7 +428,7 @@ if __name__ == '__main__':
     parser.add_argument('--activation', default='mish', type=str, required=False) 
     parser.add_argument('--r_se', default=8, type=int, required=False)
 
-    parser.add_argument('--n_epochs', default=50, type=int, required=False)
+    parser.add_argument('--n_epochs', default=2, type=int, required=False)
     parser.add_argument('--batch_size', default=50, type=int, required=False)  
     parser.add_argument('--loader_shuffle', default=True, type=bool, required=False)
     parser.add_argument('--pin_memory', default=False, type=bool, required=False)
@@ -415,7 +443,7 @@ if __name__ == '__main__':
     parser.add_argument('--actions_to_consider', default='all', help='Actions to visualize.Choose either all or a list of actions')
     parser.add_argument('--batch_size_test', type=int, default=256, help='batch size for the test set')
     parser.add_argument('--visualize_from', type=str, default='test', choices=['train', 'val', 'test'], help='choose data split to visualize from(train-val-test)')
-    parser.add_argument('--loss_type', type=str, default='mpjpe', choices=['mpjpe', 'angle'])
+    parser.add_argument('--loss_type', type=str, default='angle', choices=['mpjpe', 'angle'])
     # parser.add_argument('--delta_x', type=bool, default=True, help='predicting the difference between 2 frames')
 
     args = parser.parse_args()
@@ -428,7 +456,7 @@ if __name__ == '__main__':
         parser_mpjpe.add_argument('--channels_mlp_dim', default=50, type=int, required=False)  
         parser_mpjpe.add_argument('--regularization', default=0.1, type=float, required=False)  
         parser_mpjpe.add_argument('--pose_dim', default=66, type=int, required=False)
-        parser_mpjpe.add_argument('--delta_x', type=bool, default=True, help='predicting the difference between 2 frames')
+        parser_mpjpe.add_argument('--delta_x', type=bool, default=False, help='predicting the difference between 2 frames')
         parser_mpjpe.add_argument('--lr', default=0.001, type=float, required=False)  
         args = parser_mpjpe.parse_args()
     
@@ -493,5 +521,7 @@ if __name__ == '__main__':
 
     model_name = 'h36_3d_'+str(args.output_n)+'frames_ckpt'
 
-    train(model, model_name, args)
+    train_output = train(model, model_name, args)
+
+    print('>>> Training finished', train_output)
     test_mpjpe(model, args)
