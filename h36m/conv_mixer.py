@@ -195,16 +195,29 @@ class ConvMixer(nn.Module):
                  use_max_pooling:bool=False):
         
         super().__init__()
+
+        ###################################################################
+        # Input dimensionality
+        ###################################################################
+
         self.dimPosIn = dimPosIn # 51 for h36m, 66 for 3dpw
-        self.dimPosOut = dimPosOut # 48 for h36m, 66 for 3dpw
-        self.dimPosEmb = dimPosEmb
-        self.num_blocks = num_blocks 
         self.in_nTP = in_nTP
+
+        ###################################################################
+        # Encoding
+        ###################################################################
+
+        self.dimPosEmb = dimPosEmb
         self.conv_in = nn.Conv2d(in_channels=1, out_channels=self.dimPosEmb, kernel_size=(1, self.dimPosIn), stride=1)
         self.conv_nChan = conv_nChan
         self.channelUpscaling = nn.Linear(1, self.conv_nChan)
+
+        ###################################################################
+        # Convolutional Mixer Blocks
+        ###################################################################
+
         self.activation = activation
-        
+        self.num_blocks = num_blocks
         self.Mixer_Block = nn.ModuleList(MixerBlock(conv_nChan = self.conv_nChan, 
                                                     in_nTP=self.in_nTP, 
                                                     dimPosEmb=self.dimPosEmb, 
@@ -218,10 +231,14 @@ class ConvMixer(nn.Module):
                                                     r_se=r_se, 
                                                     use_max_pooling=use_max_pooling) 
                                                         for _ in range(num_blocks))
-            
-        
+
         self.LN = nn.LayerNorm(self.dimPosEmb)
-        
+
+        ###################################################################
+        # Decoding
+        ###################################################################
+
+        self.dimPosOut = dimPosOut  # 48 for h36m, 66 for 3dpw
         self.out_nTP = out_nTP
         self.project_channels = nn.Conv2d(self.conv_nChan, 1, kernel_size=(1,1), stride=1)
         self.conv_out = nn.Conv1d(in_channels=self.in_nTP, out_channels=self.out_nTP, kernel_size=1, stride=1)
