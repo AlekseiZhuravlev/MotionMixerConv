@@ -99,7 +99,7 @@ class ConvBlock(nn.Module):
                  conv_out_chan:int=1, 
                  conv_kernel_shape:Tuple[int, int]=(1,3), 
                  conv_stride:Tuple[int, int]=(1,1), 
-                 conv_padding:Tuple[int, int]=(0,1), 
+                 conv_padding:Union[Tuple[int, int], str]="same", 
                  activation:str='gelu', 
                  regularization:float=0.0):
         super().__init__()
@@ -216,7 +216,7 @@ class ConvMixerBlock(nn.Module):
         # self.conv_padding_transposed = (self.conv_padding[1], self.conv_padding[0])
         if conv1_padding is None:
             # Auto-padding
-            conv1_padding = (conv1_kernel_shape[0]//2, conv1_kernel_shape[1]//2)
+            conv1_padding = "same" # (conv1_kernel_shape[0]//2, conv1_kernel_shape[1]//2)
         if conv1_stride is None:
             conv1_stride = (1,1)
         self.conv1 = ConvBlock(batchnorm_dim=self.conv_nChan, 
@@ -240,7 +240,7 @@ class ConvMixerBlock(nn.Module):
                 conv2_stride = (1,1)
             if conv2_padding is None:
                 # Auto-padding
-                conv2_padding = (conv2_kernel_shape[0]//2, conv2_kernel_shape[1]//2)
+                conv2_padding = "same" #(conv2_kernel_shape[0]//2, conv2_kernel_shape[1]//2)
             self.conv2 = ConvBlock(batchnorm_dim=self.conv_nChan,
                                 conv_in_chan=self.conv_nChan,
                                 conv_out_chan=self.conv_nChan,

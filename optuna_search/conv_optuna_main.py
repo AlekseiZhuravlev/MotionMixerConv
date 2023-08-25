@@ -232,6 +232,9 @@ class Objective:
         args.lr = trial.suggest_float('lr', 1e-04, 1e-02)
         args.regularization = trial.suggest_categorical('regularization', [-1, 0, 0.1, 0.2])
         args.conv_mode = trial.suggest_categorical('conv_mode', ['once', 'twice'])
+        if args.conv_mode == 'twice':
+            args.kernel2_x = trial.suggest_int('kernel2_x', 1, args.input_n)
+            args.kernel2_y = trial.suggest_int('kernel2_y', 1, args.dimPosEmb)
         return args, trial
     
 
