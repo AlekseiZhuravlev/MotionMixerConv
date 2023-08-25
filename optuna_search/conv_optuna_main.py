@@ -72,7 +72,7 @@ class Objective:
 
         # sequence lengths
         parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
-        parser.add_argument('--output_n', type=int, default=25, help="number of model's output frames")
+        parser.add_argument('--output_n', type=int, default=20, help="number of model's output frames")
         parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5],
                             help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
         parser.add_argument('--actions_to_consider', default='all',
@@ -224,6 +224,7 @@ class Objective:
 
 
     def overwrite_optuna_params(self, args, trial):
+        args.n_epochs = trial.suggest_int('n_epochs', 1, 50)
         args.dimPosEmb = trial.suggest_int('dimPosEmb', 10, 100)
         args.num_blocks = trial.suggest_int('num_blocks', 1, 7)
         args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 1, 10)
@@ -312,7 +313,7 @@ if __name__ == '__main__':
         base_folder = f'/home/user/bornhaup/FinalProject/MotionMixerConv/studies'
     else:
         raise ValueError('User not supported')
-    study_name = 'example-study_train-test-loss_metrics'
+    study_name = 'example-study_out_nTP=20'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):
@@ -327,11 +328,14 @@ if __name__ == '__main__':
     )
     # To use the dashboard, run the following command:
     # optuna-dashboard sqlite:////home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies/example-study/results.db
+    # respectively: optuna-dashboard sqlite:////home/user/bornhaup/FinalProject/MotionMixerConv/studies/example-study_train-test-loss_metrics/results.db
+    # then: ssh -L 8080:127.0.0.1:8080 cuda4
 
     study.optimize(
         Objective(f'{base_folder}/{study_name}'),
-        # direction="minimize",
-        n_trials=2
+        direction="minimize",
+        n_trials=40,
+        timeout=60*60*12 # 12 hours
     )
     print('Number of finished trials:', len(study.trials))
     print(study.best_params)
