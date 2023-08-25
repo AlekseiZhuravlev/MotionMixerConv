@@ -2,7 +2,13 @@ import torch
 import os
 
 import sys
-sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv/h36m')
+USER_NAME = 'v'
+if USER_NAME == 'a':
+    sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv/h36m')
+elif USER_NAME == 'v':
+    sys.path.append('/home/user/bornhaup/FinalProject/MotionMixerConv/h36m')
+else:
+    raise ValueError('User not defined')
 
 from datasets.dataset_h36m import H36M_Dataset
 from datasets.dataset_h36m_ang import H36M_Dataset_Angle
@@ -395,8 +401,8 @@ if __name__ == '__main__':
     # raise ValueError('This script is not supposed to be run directly. Use optuna_main.py instead.')
 
     parser = argparse.ArgumentParser(add_help=False) # Parameters for mpjpe
-    user = "a"
-    if user == "a":
+    
+    if USER_NAME == "a":
         parser.add_argument('--data_dir', type=str,
                             default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
                             help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
@@ -406,11 +412,11 @@ if __name__ == '__main__':
         parser.add_argument('--model_path', type=str,
                             default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/checkpoints',
                             help='directory with the models checkpoints ')
-    elif user =="v":
+    elif USER_NAME =="v":
         parser.add_argument('--data_dir', type=str,
                             default='/home/user/bornhaup/FinalProject/VisionLabSS23_3DPoses',
                             help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
-        parser.add_argument('--root',
+        parser.add_argument('--save_path',
                             default='/home/user/bornhaup/FinalProject/MotionMixerConv/runs',
                             type=str, help='root path for the logging') #'./runs'
         parser.add_argument('--model_path', type=str,

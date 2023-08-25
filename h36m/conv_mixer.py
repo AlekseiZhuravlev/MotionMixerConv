@@ -192,7 +192,7 @@ class ConvMixerBlock(nn.Module):
                  in_nTP:int, 
                  conv_nChan:int,  
                  conv1_kernel_shape:Tuple[int, int]=(1,3),
-                 conv1_stride:Tuple[int, int]=(1,1),
+                 conv1_stride:Union[Tuple[int, int], None]=None,
                  conv1_padding:Union[Tuple[int, int], None]=None, 
                  mode_conv:str="twice",
                  conv2_kernel_shape:Union[Tuple[int, int], None]=None, 
@@ -217,6 +217,8 @@ class ConvMixerBlock(nn.Module):
         if conv1_padding is None:
             # Auto-padding
             conv1_padding = (conv1_kernel_shape[0]//2, conv1_kernel_shape[1]//2)
+        if conv1_stride is None:
+            conv1_stride = (1,1)
         self.conv1 = ConvBlock(batchnorm_dim=self.conv_nChan, 
                                conv_in_chan=self.conv_nChan, 
                                conv_out_chan=self.conv_nChan, 
@@ -233,9 +235,9 @@ class ConvMixerBlock(nn.Module):
         
         if mode_conv == "twice":
             if conv2_kernel_shape is None:
-                conv2_kernel_shape = conv1_kernel_shape[::-1]
+                conv2_kernel_shape = (min(conv1_kernel_shape[1], in_nTP), min(conv1_kernel_shape[0], dimPosEmb))
             if conv2_stride is None:
-                conv2_stride = conv1_stride[::-1]
+                conv2_stride = (1,1)
             if conv2_padding is None:
                 # Auto-padding
                 conv2_padding = (conv2_kernel_shape[0]//2, conv2_kernel_shape[1]//2)
