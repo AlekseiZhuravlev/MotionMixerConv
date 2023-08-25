@@ -28,27 +28,41 @@ class Objective:
         os.makedirs(self.models_save_path)
 
 
-
-
-
-    def __call__(self, trial):
+    def parse_args(self, trial):
         parser = argparse.ArgumentParser(add_help=False)  # Parameters for mpjpe
 
         ############################################################################
         # Directories
+        ## Decide decide depending on current machine / user
         ############################################################################
 
-        parser.add_argument('--data_dir', type=str,
-                            default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
-                            help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
-        parser.add_argument('--save_path',
-                            # default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/runs',
-                            default=self.models_save_path,
-                            type=str, help='root path for logging and saving checkpoint')  # './runs'
-        # parser.add_argument('--model_path', type=str,
-        #                     default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/checkpoints',
-        #                     help='directory with the models checkpoints ')
-
+        parser.add_argument('--user', type=str,
+                            default='v',
+                            help='User name; either "a" or "v"')
+        if args.user == "a":
+            parser.add_argument('--data_dir', type=str,
+                                default='/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses',
+                                help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
+            parser.add_argument('--save_path',
+                                # default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/runs',
+                                default=self.models_save_path,
+                                type=str, help='root path for logging and saving checkpoint')  # './runs'
+            # parser.add_argument('--model_path', type=str,
+            #                     default='/home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/checkpoints',
+            #                     help='directory with the models checkpoints ')
+        elif args.user == "v":
+            parser.add_argument('--data_dir', type=str,
+                                default='/home/user/bornhaup/FinalProject/VisionLabSS23_3DPoses',
+                                help='path to the unziped dataset directories(H36m/AMASS/3DPW)')
+            parser.add_argument('--root', type=str,
+                                default='/home/user/bornhaup/FinalProject/MotionMixerConv/runs',
+                                help='root path for the logging and saving checkpoint') #'./runs'
+            # parser.add_argument('--model_path', type=str,
+            #                     default='/home/user/bornhaup/FinalProject/MotionMixerConv/checkpoints',
+            #                     help='directory with the models checkpoints ')  # './checkpoints'
+        else:
+            raise ValueError('User not supported')
+        
         ############################################################################
         # Dataset settings
         ############################################################################
@@ -66,10 +80,10 @@ class Objective:
         parser.add_argument('--batch_size_test', type=int, default=50, help='batch size for the test set')
 
         # not important
-        parser.add_argument('--num_worker', default=4, type=int, help='number of workers in the dataloader')
+        parser.add_argument('--num_worker', default=8, type=int, help='number of workers in the dataloader')
         parser.add_argument('--loader_shuffle', default=True, type=bool, required=False)
         parser.add_argument('--pin_memory', default=False, type=bool, required=False)
-        parser.add_argument('--loader_workers', default=4, type=int, required=False)
+        parser.add_argument('--loader_workers', default=8, type=int, required=False)
 
         ############################################################################
         # Training settings
@@ -87,8 +101,8 @@ class Objective:
                             help='gamma correction to the learning rate, after reaching the milestone epochs')
 
         # minor settings
-        parser.add_argument('--initialization', type=str, default='none',
-                            help='none, glorot_normal, glorot_uniform, hee_normal, hee_uniform')
+        # parser.add_argument('--initialization', type=str, default='none',
+        #                     help='none, glorot_normal, glorot_uniform, hee_normal, hee_uniform')
         parser.add_argument('--clip_grad', type=float, default=None, help='select max norm to clip gradients')
         parser.add_argument('--dev', default='cuda:0', type=str, required=False)
 
@@ -128,7 +142,7 @@ class Objective:
             # not optimizable
             parser_loss.add_argument('--pose_dim', default=66, type=int, required=False)
             parser_loss.add_argument('--delta_x', type=bool, default=False,
-                                      help='predicting the difference between 2 frames')
+                                    help='predicting the difference between 2 frames')
 
 
         elif args.loss_type == 'angle':
@@ -143,7 +157,7 @@ class Objective:
             # not optimizable
             parser_loss.add_argument('--pose_dim', default=48, type=int, required=False)
             parser_loss.add_argument('--delta_x', type=bool, default=False,
-                                      help='predicting the difference between 2 frames')
+                                    help='predicting the difference between 2 frames')
         else:
             raise ValueError('Loss type not supported')
 
@@ -183,6 +197,12 @@ class Objective:
         args = parser_loss.parse_args()
         if args.loss_type == 'angle' and args.delta_x:
             raise ValueError('Delta_x and loss type angle cant be used together.')
+    
+        return args, trial
+
+
+    def __call__(self, trial):
+        args, trial = self.parse_args(trial)
 
         ############################################################################
         # Create model
