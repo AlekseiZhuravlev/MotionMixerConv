@@ -415,7 +415,7 @@ class ConvMixer(nn.Module):
         
         self.out_nTP = out_nTP
         self.project_channels = nn.Conv2d(self.conv_nChan, 1, kernel_size=(1,1), stride=1)
-        self.conv_out = nn.Conv1d(in_channels=self.in_nTP, out_channels=self.out_nTP, kernel_size=1, stride=1)
+        self.conv_out = nn.Conv2d(in_channels=self.in_nTP, out_channels=self.out_nTP, kernel_size=1, stride=1)
         self.fc_out = nn.Linear(self.dimPosEmb, self.dimPosOut)
         
 
@@ -449,8 +449,10 @@ class ConvMixer(nn.Module):
         y = self.LN(y) # [bs, conv_nChan, in_nTP, dimPosEmb]
 
         ##### Decoding #####
-        y = self.project_channels(y).squeeze(1) # [bs, in_nTP, dimPosEmb]
-        y = self.conv_out(y) # [bs, out_nTP, dimPosEmb]
+        y = y.transpose(1, 2) # [bs, in_nTP, conv_nChan, dimPosEmb]
+        y = self.conv_out(y)  # [bs, out_nTP, conv_nChan, dimPosEmb]
+        y = y.transpose(1, 2) # [bs, conv_nChan, out_nTP, dimPosEmb]
+        y = self.project_channels(y).squeeze(1) # [bs, out_nTP, dimPosEmb]
         y = nn.GELU()(y) # [bs, out_nTP, dimPosEmb]
         out = self.fc_out(y) # [bs, out_nTP, dimPosOut]
 
