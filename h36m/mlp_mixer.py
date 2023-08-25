@@ -265,7 +265,7 @@ class MlpMixer(nn.Module):
         self.tokens_mlp_dim = tokens_mlp_dim
         self.channels_mlp_dim = channels_mlp_dim
         self.input_size = input_size #varyies with the number of joints
-        self.conv = nn.Conv1d(1, self.hidden_dim, (1, self.input_size), stride=1)
+        self.conv = nn.Conv2d(1, self.hidden_dim, (1, self.input_size), stride=1)
         self.activation = activation
 
         self.channel_only = False # False #True
