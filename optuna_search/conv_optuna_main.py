@@ -182,19 +182,19 @@ class Objective:
             default=1,
             type=int, required=False)
         parser_loss.add_argument(
-            '--kernel1_x',
+            '--kernel1_x_Time',
             default=5,
             type=int, required=False)
         parser_loss.add_argument(
-            '--kernel1_y',
+            '--kernel1_y_Pose',
             default=5, 
             type=int, required=False)
         parser_loss.add_argument(
-            '--kernel2_x',
+            '--kernel2_x_Time',
             default=5,
             type=int, required=False)
         parser_loss.add_argument(
-            '--kernel2_y',
+            '--kernel2_y_Pose',
             default=5, 
             type=int, required=False)
         parser_loss.add_argument(
@@ -216,10 +216,10 @@ class Objective:
         args = parser_loss.parse_args()
         if args.loss_type == 'angle' and args.delta_x:
             raise ValueError('Delta_x and loss type angle cant be used together.')
-        assert args.kernel1_x <= args.input_n, "Kernel 1 has wrong size in x dim" # input_n == in_nTP
-        assert args.kernel1_y <= args.dimPosEmb, "Kernel 1 has wrong size in y dim"
-        assert args.kernel2_x <= args.input_n, "Kernel 2 has wrong size in x dim" # input_n == in_nTP
-        assert args.kernel2_y <= args.dimPosEmb, "Kernel 2 has wrong size in y dim"
+        assert args.kernel1_x_Time <= args.input_n, "Kernel 1 has wrong size in x dim" # input_n == in_nTP
+        assert args.kernel1_y_Pose <= args.dimPosEmb, "Kernel 1 has wrong size in y dim"
+        assert args.kernel2_x_Time <= args.input_n, "Kernel 2 has wrong size in x dim" # input_n == in_nTP
+        assert args.kernel2_y_Pose <= args.dimPosEmb, "Kernel 2 has wrong size in y dim"
         return args
 
 
@@ -228,14 +228,14 @@ class Objective:
         args.dimPosEmb = trial.suggest_int('dimPosEmb', 10, 100)
         args.num_blocks = trial.suggest_int('num_blocks', 1, 7)
         args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 1, 10)
-        args.kernel1_x = trial.suggest_int('kernel1_x', 1, args.input_n)
-        args.kernel1_y = trial.suggest_int('kernel1_y', 1, args.dimPosEmb)
+        args.kernel1_x_Time = trial.suggest_int('kernel1_x_Time', 1, args.input_n)
+        args.kernel1_y_Pose = trial.suggest_int('kernel1_y_Pose', 1, args.dimPosEmb)
         args.lr = trial.suggest_float('lr', 1e-04, 1e-02)
         args.regularization = trial.suggest_categorical('regularization', [-1, 0, 0.1, 0.2])
         args.conv_mode = trial.suggest_categorical('conv_mode', ['once', 'twice'])
         if args.conv_mode == 'twice':
-            args.kernel2_x = trial.suggest_int('kernel2_x', 1, args.input_n)
-            args.kernel2_y = trial.suggest_int('kernel2_y', 1, args.dimPosEmb)
+            args.kernel2_x_Time = trial.suggest_int('kernel2_x_Time', 1, args.input_n)
+            args.kernel2_y_Pose = trial.suggest_int('kernel2_y_Pose', 1, args.dimPosEmb)
         return args, trial
     
 
@@ -254,11 +254,11 @@ class Objective:
                             in_nTP=args.input_n,
                             out_nTP=args.output_n,
                             conv_nChan=args.channels_conv_blocks,
-                            conv1_kernel_shape=(args.kernel1_x, args.kernel1_y),
+                            conv1_kernel_shape=(args.kernel1_x_Time, args.kernel1_y_Pose),
                             conv1_stride=(1,1),
                             conv1_padding=None,
                             mode_conv=args.conv_mode,
-                            conv2_kernel_shape=(args.kernel2_x, args.kernel2_y),
+                            conv2_kernel_shape=(args.kernel2_x_Time, args.kernel2_y_Pose),
                             conv2_stride=(1,1),
                             conv2_padding=None,
                             activation=args.activation,
@@ -277,11 +277,11 @@ class Objective:
         model_name = f'h3.6m_{args.loss_type}_'\
                      f'hidden_dim={args.dimPosEmb}_'\
                      f'num_blocks={args.num_blocks}_' \
-                     f'k1x={args.kernel1_x}_'\
-                     f'k1y={args.kernel1_y}_'\
+                     f'k1x={args.kernel1_x_Time}_'\
+                     f'k1y={args.kernel1_y_Pose}_'\
                      f'conv_mode={args.conv_mode}_'\
-                     f'k2x={args.kernel2_x}_'\
-                     f'k2y={args.kernel2_y}_'\
+                     f'k2x={args.kernel2_x_Time}_'\
+                     f'k2y={args.kernel2_y_Pose}_'\
                      f'lr={args.lr:.4f}_'\
                      f'regularization={args.regularization}'
 
@@ -328,13 +328,13 @@ if __name__ == '__main__':
     )
     # To use the dashboard, run the following command:
     # optuna-dashboard sqlite:////home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies/example-study/results.db
-    # respectively: optuna-dashboard sqlite:////home/user/bornhaup/FinalProject/MotionMixerConv/studies/example-study_train-test-loss_metrics/results.db
+    # respectively: optuna-dashboard sqlite:////home/user/bornhaup/FinalProject/MotionMixerConv/studies/example-study_out_nTP=20/results.db
     # then: ssh -L 8080:127.0.0.1:8080 cuda4
 
     study.optimize(
         Objective(f'{base_folder}/{study_name}'),
-        direction="minimize",
-        n_trials=40,
+        # direction="minimize",
+        n_trials=50,
         timeout=60*60*12 # 12 hours
     )
     print('Number of finished trials:', len(study.trials))
