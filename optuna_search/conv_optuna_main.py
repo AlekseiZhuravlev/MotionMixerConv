@@ -72,7 +72,7 @@ class Objective:
 
         # sequence lengths
         parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
-        parser.add_argument('--output_n', type=int, default=20, help="number of model's output frames")
+        parser.add_argument('--output_n', type=int, default=10, help="number of model's output frames")
         parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5],
                             help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
         parser.add_argument('--actions_to_consider', default='all',
@@ -93,7 +93,7 @@ class Objective:
         ############################################################################
 
         # epochs / checkpoints
-        parser.add_argument('--n_epochs', default=2, type=int, required=False)
+        parser.add_argument('--n_epochs', default=40, type=int, required=False)
         parser.add_argument('--load_checkpoint', default=False, type=bool, required=False)
 
         # LR scheduler
@@ -224,7 +224,7 @@ class Objective:
 
 
     def overwrite_optuna_params(self, args, trial):
-        args.n_epochs = trial.suggest_int('n_epochs', 1, 50)
+        # args.n_epochs = trial.suggest_int('n_epochs', 1, 50)
         args.dimPosEmb = trial.suggest_int('dimPosEmb', 10, 100)
         args.num_blocks = trial.suggest_int('num_blocks', 1, 7)
         args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 1, 10)
@@ -248,25 +248,25 @@ class Objective:
         ############################################################################
 
         model = ConvMixer(num_blocks=args.num_blocks,
-                            dimPosIn=args.pose_dim,
-                            dimPosEmb=args.dimPosEmb,
-                            dimPosOut=args.pose_dim,
-                            in_nTP=args.input_n,
-                            out_nTP=args.output_n,
-                            conv_nChan=args.channels_conv_blocks,
-                            conv1_kernel_shape=(args.kernel1_x_Time, args.kernel1_y_Pose),
-                            conv1_stride=(1,1),
-                            conv1_padding=None,
-                            mode_conv=args.conv_mode,
-                            conv2_kernel_shape=(args.kernel2_x_Time, args.kernel2_y_Pose),
-                            conv2_stride=(1,1),
-                            conv2_padding=None,
-                            activation=args.activation,
-                            regularization=args.regularization,
-                            use_se=True,
-                            r_se=args.r_se,
-                            use_max_pooling=False,
-                            encoder_n_harmonic_functions=64 # Is this flexible?
+                         dimPosIn=args.pose_dim,
+                         dimPosEmb=args.dimPosEmb,
+                         dimPosOut=args.pose_dim,
+                         in_nTP=args.input_n,
+                         out_nTP=args.output_n,
+                         conv_nChan=args.channels_conv_blocks,
+                         conv1_kernel_shape=(args.kernel1_x_Time, args.kernel1_y_Pose),
+                         conv1_stride=(1,1),
+                         conv1_padding=None,
+                         mode_conv=args.conv_mode,
+                         conv2_kernel_shape=(args.kernel2_x_Time, args.kernel2_y_Pose),
+                         conv2_stride=(1,1),
+                         conv2_padding=None,
+                         activation=args.activation,
+                         regularization=args.regularization,
+                         use_se=True,
+                         r_se=args.r_se,
+                         use_max_pooling=False,
+                         encoder_n_harmonic_functions=64 # Is this flexible?
                         )
         model = model.to(args.dev)
 
@@ -313,7 +313,7 @@ if __name__ == '__main__':
         base_folder = f'/home/user/bornhaup/FinalProject/MotionMixerConv/studies'
     else:
         raise ValueError('User not supported')
-    study_name = 'example-study_out_nTP=20'
+    study_name = 'example-study_out_nTP=10'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):
