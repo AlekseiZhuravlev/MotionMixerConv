@@ -4,116 +4,6 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.animation as animation
 import torch
 
-
-def visualize_batch_single_ais(batch_full):
-
-    xs = batch_full[:, ::3]
-    ys = batch_full[:, 1::3]
-    zs = batch_full[:, 2::3]
-
-    KPS_PARENT=[-1, 0, 1, 2, 3, 1, 5, 6, 1, 8, 9, 10, 8, 12, 13, 0, 0, 15, 16]
-
-    fig = plt.figure(figsize=(7, 7))
-    ax = fig.add_subplot(111, projection='3d')
-
-    joints_ais = [
-        "Nose", "Neck", "RShoulder", "RElbow", "RWrist", "LShoulder", "LElbow", "LWrist", "MidHip", "RHip", "RKnee",
-        "RAnkle", "LHip", "LKnee", "LAnkle", "REye", "LEye", "REar", "LEar"
-    ]
-    j=0
-    ax.clear()
-    ax.scatter(xs[j], ys[j],
-               zs[j])
-
-    for i in range(len(joints_ais)):
-        ax.text(xs[j, i], ys[j, i],
-               zs[j, i], joints_ais[i], size=8, zorder=1, color='k')
-
-    ax.set_xlim3d([xs.min(), xs.max()])
-    ax.set_xlabel('X')
-    #
-    ax.set_ylim3d([ys.min(), ys.max()])
-    ax.set_ylabel('Y')
-    #
-    ax.set_zlim3d([zs.min(), zs.max()])
-    ax.set_zlabel('Z')
-
-    ax.set_title('Skeleton model, AIS dataset')
-
-    for kp_idx in range(1, len(xs[j])):
-        lxs = torch.stack([xs[j, KPS_PARENT[kp_idx]], xs[j, kp_idx]])
-        lys = torch.stack([ys[j, KPS_PARENT[kp_idx]], ys[j, kp_idx]])
-        lzs = torch.stack([zs[j, KPS_PARENT[kp_idx]], zs[j, kp_idx]])
-
-        ax.plot(lxs, lys, lzs)
-
-def make_animation_ais(batch_full):
-    xs = batch_full[:, ::3]
-    ys = batch_full[:, 1::3]
-    zs = batch_full[:, 2::3]
-
-    KPS_PARENT=[-1, 0, 1, 2, 3, 1, 5, 6, 1, 8, 9, 10, 8, 12, 13, 0, 0, 15, 16]
-
-    fig = plt.figure(figsize=(7, 7))
-    ax = fig.add_subplot(111, projection='3d')
-
-    joints_ais = [
-        "Nose", "Neck", "RShoulder", "RElbow", "RWrist", "LShoulder", "LElbow", "LWrist", "MidHip", "RHip", "RKnee",
-        "RAnkle", "LHip", "LKnee", "LAnkle", "REye", "LEye", "REar", "LEar"
-    ]
-
-    images = []
-    for j in range(batch_full.shape[0]):
-        ax.clear()
-        ax.scatter(xs[j], ys[j],
-                   zs[j])
-
-        for i in range(len(joints_ais)):
-            ax.text(xs[j, i], ys[j, i],
-                    zs[j, i], joints_ais[i], size=8, zorder=1, color='k')
-
-        ax.set_xlim3d([xs.min(), xs.max()])
-        ax.set_xlabel('X')
-        #
-        ax.set_ylim3d([ys.min(), ys.max()])
-        ax.set_ylabel('Y')
-        #
-        ax.set_zlim3d([zs.min(), zs.max()])
-        ax.set_zlabel('Z')
-
-        ax.set_title('Skeleton model, AIS dataset')
-
-        for kp_idx in range(1, len(xs[j])):
-            lxs = torch.stack([xs[j, KPS_PARENT[kp_idx]], xs[j, kp_idx]])
-            lys = torch.stack([ys[j, KPS_PARENT[kp_idx]], ys[j, kp_idx]])
-            lzs = torch.stack([zs[j, KPS_PARENT[kp_idx]], zs[j, kp_idx]])
-
-            ax.plot(lxs, lys, lzs)
-
-        fig.canvas.draw()
-        image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-        image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        images.append(image_from_plot)
-
-    # destroy the figure so that the next one can be drawn
-    plt.close(fig)
-
-    # show all images as animation
-    fig = plt.figure()
-    plt.axis('off')
-    ims = [[plt.imshow(image, animated=True)] for image in images]
-    ani = animation.ArtistAnimation(fig, ims, interval=50, repeat_delay=0, blit=True)
-
-    # save animation as gif
-    ani.save('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/animation_ais.gif', writer='pillow')
-
-    # save animation as mp4
-    # ani.save('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/animation_ais.mp4', writer='ffmpeg')
-
-    plt.close()
-
-
-
 def visualize_batch_single_h3m(batch_full):
     # ignore constant joints and joints at same position with other joints
     joint_to_ignore = np.array([0, 1, 6, 11, 16, 20, 23, 24, 28, 31])
@@ -176,20 +66,28 @@ def visualize_batch_single_h3m(batch_full):
 
 
 
-def visualize_batch(batch_full):
+def visualize_batch(batch_full, save_path, batch_gt):
     # ignore constant joints and joints at same position with other joints
     joint_to_ignore = np.array([0, 1, 6, 11, 16, 20, 23, 24, 28, 31])
     dimensions_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
     dimensions_to_use = np.setdiff1d(np.arange(96), dimensions_to_ignore)
 
-
     xs_raw = batch_full[:, ::3] / 1000
     ys_raw = batch_full[:, 1::3] / 1000
     zs_raw = batch_full[:, 2::3] / 1000
 
-    xs = xs_raw
-    ys = -zs_raw
-    zs = ys_raw
+    xs = xs_raw.numpy()
+    ys = -zs_raw.numpy()
+    zs = ys_raw.numpy()
+
+    if batch_gt is not None:
+        xs_raw_gt = batch_gt[:, ::3] / 1000
+        ys_raw_gt = batch_gt[:, 1::3] / 1000
+        zs_raw_gt = batch_gt[:, 2::3] / 1000
+
+        xs_gt = xs_raw_gt.numpy()
+        ys_gt = -zs_raw_gt.numpy()
+        zs_gt = ys_raw_gt.numpy()
 
     connect = np.array([
         (1, 2), (2, 3), (3, 4), (4, 5),
@@ -204,15 +102,18 @@ def visualize_batch(batch_full):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
 
     images = []
     for j in range(batch_full.shape[0]):
         ax.clear()
         ax.scatter(xs[j, dimensions_to_use // 3], ys[j, dimensions_to_use // 3],
-                   zs[j, dimensions_to_use // 3])
+                   zs[j, dimensions_to_use // 3], c='blue')
+
+        for i in range(len(connect)):
+            ax.plot(xs[j][connect[i]], ys[j][connect[i]], zs[j][connect[i]], c='blue')
 
         ax.set_xlim3d([xs.min(), xs.max()])
         ax.set_xlabel('X')
@@ -223,8 +124,13 @@ def visualize_batch(batch_full):
         ax.set_zlim3d([zs.min(), zs.max()])
         ax.set_zlabel('Z')
 
-        for i in range(len(connect)):
-            ax.plot(xs[j][connect[i]], ys[j][connect[i]], zs[j][connect[i]])
+        if batch_gt is not None:
+            ax.scatter(xs_gt[j, dimensions_to_use // 3], ys_gt[j, dimensions_to_use // 3],
+                          zs_gt[j, dimensions_to_use // 3], c='green', label='gt')
+            for i in range(len(connect)):
+                ax.plot(xs_gt[j][connect[i]], ys_gt[j][connect[i]], zs_gt[j][connect[i]], c='green')
+            # make legend
+
 
         fig.canvas.draw()
         image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
@@ -239,12 +145,12 @@ def visualize_batch(batch_full):
     fig = plt.figure()
     plt.axis('off')
     ims = [[plt.imshow(image, animated=True)] for image in images]
-    ani = animation.ArtistAnimation(fig, ims, interval=50, repeat_delay=0, blit=True)
+    ani = animation.ArtistAnimation(fig, ims, interval=200, repeat_delay=200, blit=True)
 
     # save animation as gif
-    ani.save('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/animation.gif', writer='pillow')
+    ani.save(save_path, writer='pillow')
 
     # save animation as mp4
-    ani.save('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/animation.mp4', writer='ffmpeg')
+    # ani.save('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/animation.mp4', writer='ffmpeg')
 
     plt.close()

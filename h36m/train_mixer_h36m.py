@@ -2,26 +2,32 @@ import torch
 import os
 
 import sys
-USER_NAME = 'v'
+USER_NAME = 'a'
 if USER_NAME == 'a':
-    sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv/h36m')
+    sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv')
 elif USER_NAME == 'v':
-    sys.path.append('/home/user/bornhaup/FinalProject/MotionMixerConv/h36m')
+    sys.path.append('/home/user/bornhaup/FinalProject/MotionMixerConv')
 else:
     raise ValueError('User not defined')
 
-from datasets.dataset_h36m import H36M_Dataset
-from datasets.dataset_h36m_ang import H36M_Dataset_Angle
-from utils.data_utils import define_actions
+from h36m.datasets.dataset_h36m import H36M_Dataset
+from h36m.datasets.dataset_h36m_ang import H36M_Dataset_Angle
+from h36m.utils.data_utils import define_actions
 from torch.utils.data import DataLoader
-from mlp_mixer import MlpMixer
-from conv_mixer import ConvMixer
+from h36m.mlp_mixer import MlpMixer
+from h36m.conv_mixer_model import ConvMixer
 import torch.optim as optim
 import numpy as np
 import argparse
-from utils.utils_mixer import delta_2_gt, mpjpe_error, euler_error, auc_pck_metric, joint_angle_error
+from h36m.utils.utils_mixer import delta_2_gt, mpjpe_error, euler_error, auc_pck_metric, joint_angle_error
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
+
+# sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer')
+from conv_mixer.utils.visualization_helpers_h3m import visualize_batch
+
+import matplotlib as mpl
+mpl.use('Agg')
 
 
 def get_log_dir(out_dir):
@@ -214,7 +220,7 @@ def train(model, model_name, args):
             scheduler.step()
 
         if args.loss_type == 'mpjpe':
-            test_mpjpe_loss, test_auc_pck = test_mpjpe(model, args)
+            test_mpjpe_loss, test_auc_pck = test_mpjpe(model, args, model_name, save_results=False)
 
             metrics['auc_pck'].append(test_auc_pck)
             metrics['mpjpe'].append(test_mpjpe_loss)
@@ -244,7 +250,7 @@ def train(model, model_name, args):
     return train_loss, val_loss, test_loss, metrics
 
 
-def test_mpjpe(model, args):
+def test_mpjpe(model, args, model_name, save_results):
 
     device = args.dev
     model.eval()
@@ -268,6 +274,9 @@ def test_mpjpe(model, args):
     index_to_equal = np.concatenate(
         (joint_equal * 3, joint_equal * 3 + 1, joint_equal * 3 + 2))
 
+
+    sequences_to_save = {1, 3}
+
     for action in actions:
 
         auc_pck_running = 0
@@ -279,7 +288,6 @@ def test_mpjpe(model, args):
         elif args.loss_type == 'angle':
             dataset_test = H36M_Dataset_Angle(args.data_dir, args.input_n,
                                     args.output_n, args.skip_rate, split=2, actions=[action])
-        # print('>>> Test dataset length: {:d}'.format(dataset_test.__len__()))
 
         test_loader = DataLoader(dataset_test, batch_size=args.batch_size_test,
                                  shuffle=False, num_workers=0, pin_memory=True)
@@ -343,6 +351,14 @@ def test_mpjpe(model, args):
             auc_pck_running += auc_pck_batch*batch_dim
             running_loss += loss*batch_dim
             accum_loss += loss*batch_dim
+
+            if save_results and cnt in sequences_to_save:
+                os.makedirs(os.path.join(args.save_path, model_name, 'visualization'), exist_ok=True)
+                visualize_batch(
+                    all_joints_seq[10].cpu(),
+                    os.path.join(args.save_path, model_name, 'visualization', f'{action}_{cnt}_10.gif'),
+                    all_joints_seq_gt[10].cpu()
+                )
 
         n_batches += n
     print('overall average loss in mm is: %f'%(accum_loss/n_batches))

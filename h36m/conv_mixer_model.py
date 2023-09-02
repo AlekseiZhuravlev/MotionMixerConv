@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, List, Union, Optional
+
+import sys
+sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv')
 import conv_mixer.encoding.positional_encoder as positional_encoder
 
 
@@ -502,3 +505,7 @@ def testOneForwardPass():
 
 if __name__ == "__main__":
     testOneForwardPass()
+
+    # TODO: remove option to do convolution once
+    # TODO: remove stride and padding from arguments - hardcode stride=1 and padding=auto
+    # TODO: remove parameters of 2nd kernel from arguments - hardcode it to be transpose of 1st kernel
