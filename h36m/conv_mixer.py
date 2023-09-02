@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, List, Union, Optional
-import encoding.positional_encoder as positional_encoder
+import conv_mixer.encoding.positional_encoder as positional_encoder
 
 
 class MultiChanSELayer(nn.Module):
