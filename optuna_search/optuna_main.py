@@ -24,7 +24,7 @@ class Objective:
         if os.path.exists(self.models_save_path):
             # clear the folder
             print('Study directory already exists:', self.models_save_path)
-            shutil.rmtree(self.models_save_path)
+            # shutil.rmtree(self.models_save_path)
         os.makedirs(self.models_save_path)
 
 
@@ -254,7 +254,7 @@ if __name__ == '__main__':
     if os.path.exists(study_path):
         # clear the folder
         print('Study directory already exists:', study_path)
-        shutil.rmtree(study_path)
+        # shutil.rmtree(study_path)
     os.makedirs(study_path)
 
     study = optuna.create_study(

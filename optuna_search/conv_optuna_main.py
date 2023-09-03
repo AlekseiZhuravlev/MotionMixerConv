@@ -190,6 +190,7 @@ class Objective:
         return args
 
     def overwrite_optuna_params(self, args, trial):
+        # NOTE: this will be overriden by GridSampler
         args.dimPosEmb = trial.suggest_categorical('dimPosEmb', [64, 128])
         args.channels_conv_blocks = trial.suggest_categorical('channels_conv_blocks', [8, 16])
         args.kernel1_x_Time = trial.suggest_categorical('kernel1_x_Time', [1, 3, 5])
@@ -298,6 +299,13 @@ if __name__ == '__main__':
         storage=f"sqlite:///{base_folder}/{study_name}/results.db",
         directions=["minimize", "minimize"],
         load_if_exists=True,
+        sampler=optuna.samplers.GridSampler({
+            'dimPosEmb': [64, 128],
+            'channels_conv_blocks': [8, 16],
+            'kernel1_x_Time': [1, 3, 5],
+            'kernel1_y_Pose': [1, 9, 15],
+            'encoder_n_harmonic_functions': [0, 64],
+        })
     )
     # To use the dashboard, run the following command:
     # optuna-dashboard sqlite:////home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies/example-study/results.db
@@ -308,7 +316,8 @@ if __name__ == '__main__':
         Objective(f'{base_folder}/{study_name}'),
         # direction="minimize",
         # n_trials=2,
-        timeout=60 * 60 * 47  # 47 hours
+        timeout=60 * 60 * 47,  # 47 hours,
+        catch=(Exception,),
     )
     print('Number of finished trials:', len(study.trials))
     print('To use the dashboard, run the following command:')

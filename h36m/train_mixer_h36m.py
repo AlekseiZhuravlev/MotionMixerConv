@@ -26,6 +26,8 @@ from torch.utils.tensorboard import SummaryWriter
 # sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer')
 from conv_mixer.utils.visualization_helpers_h3m import visualize_batch
 
+import time
+
 import matplotlib as mpl
 mpl.use('Agg')
 
@@ -49,6 +51,7 @@ def train(model, model_name, args):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     else:
+        time.sleep(5)
         raise ValueError('The directory already exists. Please, change the name of the model', log_dir)
 
     tb_writer = SummaryWriter(log_dir=log_dir)
@@ -254,6 +257,8 @@ def test_mpjpe(model, args, model_name, save_results):
 
     device = args.dev
     model.eval()
+
+    auc_pck_accum = 0
     accum_loss = 0
     n_batches = 0  # number of batches for all the sequences
     actions = define_actions(args.actions_to_consider)
@@ -279,7 +284,6 @@ def test_mpjpe(model, args, model_name, save_results):
 
     for action in actions:
 
-        auc_pck_running = 0
         running_loss = 0
         n = 0
         if args.loss_type == 'mpjpe':
@@ -343,12 +347,19 @@ def test_mpjpe(model, args, model_name, save_results):
             loss = mpjpe_error(all_joints_seq.view(-1, args.output_n, 32, 3),
                                all_joints_seq_gt.view(-1, args.output_n, 32, 3))
 
+            # print('sequences_predict.shape', sequences_predict.shape)
+            # print(sequences_predict)
+            #
+            # print('all_joints_seq.shape', all_joints_seq.shape)
+            # print(all_joints_seq)
+            # exit(0)
+
             auc_pck_batch = auc_pck_metric(
-                all_joints_seq.view(-1, args.output_n, 32, 3),
-                all_joints_seq_gt.view(-1, args.output_n, 32, 3)
+                sequences_predict.view(-1, args.output_n, 22, 3) / 1000,
+                sequences_gt.view(-1, args.output_n, 22, 3) / 1000
             )
 
-            auc_pck_running += auc_pck_batch*batch_dim
+            auc_pck_accum += auc_pck_batch*batch_dim
             running_loss += loss*batch_dim
             accum_loss += loss*batch_dim
 
@@ -361,9 +372,10 @@ def test_mpjpe(model, args, model_name, save_results):
                 )
 
         n_batches += n
+        # total_pck += auc_pck_running
     print('overall average loss in mm is: %f'%(accum_loss/n_batches))
-    print('auc_pck is:', auc_pck_running/n_batches)
-    return accum_loss/n_batches, auc_pck_running/n_batches
+    print('auc_pck is:', auc_pck_accum/n_batches)
+    return accum_loss/n_batches, auc_pck_accum/n_batches
 
 
 def test_angle(model, args):
