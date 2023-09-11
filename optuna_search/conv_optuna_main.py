@@ -6,6 +6,7 @@ import sys
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import copy
 
 USER_NAME = 'a'  # 'a' or 'v'
 if USER_NAME == "a":
@@ -65,7 +66,7 @@ class Objective:
         # sequence lengths
         parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
         parser.add_argument('--output_n', type=int, default=10, help="number of model's output frames")
-        parser.add_argument('--skip_rate', type=int, default=2, choices=[1, 5],
+        parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5],
                             help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
         parser.add_argument('--actions_to_consider', default='all',
                             help='Actions to visualize.Choose either all or a list of actions')
@@ -144,10 +145,10 @@ class Objective:
         #     '--dimPosEmb',
         #     default=50,
         #     type=int, required=False)
-        parser.add_argument(
-            '--num_blocks',
-            default=4,
-            type=int, required=False)
+        # parser.add_argument(
+        #     '--num_blocks',
+        #     default=4,
+        #     type=int, required=False)
         # parser_loss.add_argument(
         #     '--channels_conv_blocks',
         #     default=1,
@@ -177,10 +178,17 @@ class Objective:
         #     default='once',
         #     choices=['once', 'twice'], type=str, required=False)
 
+        # args.encoder_n_harmonic_functions = trial.suggest_categorical('encoder_n_harmonic_functions', [0])
+        # args.encoder_omega0 = trial.suggest_categorical('encoder_omega0', [0.1])
+
         ############################################################################
         # Parse arguments
         ############################################################################
         args = parser.parse_args()
+
+        args.encoder_n_harmonic_functions = 0
+        args.encoder_omega0 = 0
+
         # if args.loss_type == 'angle' and args.delta_x:
         #     raise ValueError('Delta_x and loss type angle cant be used together.')
         # assert args.kernel1_x_Time <= args.input_n, "Kernel 1 has wrong size in x dim" # input_n == in_nTP
@@ -191,11 +199,15 @@ class Objective:
 
     def overwrite_optuna_params(self, args, trial):
         # NOTE: this will be overriden by GridSampler
-        args.dimPosEmb = trial.suggest_categorical('dimPosEmb', [64, 128])
-        args.channels_conv_blocks = trial.suggest_categorical('channels_conv_blocks', [8, 16])
-        args.kernel1_x_Time = trial.suggest_categorical('kernel1_x_Time', [1, 3, 5])
-        args.kernel1_y_Pose = trial.suggest_categorical('kernel1_y_Pose', [1, 9, 15])
-        args.encoder_n_harmonic_functions = trial.suggest_categorical('encoder_n_harmonic_functions', [0, 64])
+        args.dimPosEmb = trial.suggest_int('dimPosEmb', 64, 224, step=32)
+        args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 4, 16, step=4)
+        args.kernel1_x_Time = trial.suggest_int('kernel1_x_Time', 1, 9, step=4)
+        args.kernel1_y_Pose = trial.suggest_int('kernel1_y_Pose', 1, 25, step=4)
+        args.num_blocks = trial.suggest_int('num_blocks', 2, 6, step=2)
+
+        # disabled
+        # args.encoder_n_harmonic_functions = trial.suggest_categorical('encoder_n_harmonic_functions', [0])
+        # args.encoder_omega0 = trial.suggest_categorical('encoder_omega0', [0.1])
         return args, trial
 
     def train_model_with_loss(self, args, trial, loss_type, pose_dim):
@@ -221,6 +233,7 @@ class Objective:
             conv_nChan=args.channels_conv_blocks,
             conv1_kernel_shape=(args.kernel1_x_Time, args.kernel1_y_Pose),
             encoder_n_harmonic_functions=args.encoder_n_harmonic_functions,
+            encoder_omega0=args.encoder_omega0,
 
             mode_conv="twice",
             activation=args.activation,
@@ -245,7 +258,8 @@ class Objective:
                      f'k1x={args.kernel1_x_Time}_' \
                      f'k1y={args.kernel1_y_Pose}_' \
                      f'channels_conv_blocks={args.channels_conv_blocks}_' \
-                     f'encoder_n_harmonic_functions={args.encoder_n_harmonic_functions}'
+                     f'encoder_n_harmonic_functions={args.encoder_n_harmonic_functions}_' \
+                     f'encoder_omega0={args.encoder_omega0}_'
 
         train_loss_list, val_loss_list, test_loss_list, metrics_dict = train_mixer_h36m.train(model, model_name, args)
 
@@ -258,22 +272,42 @@ class Objective:
         trial.set_user_attr(f"val_loss_{loss_type}", val_loss_list[-1].item())
         trial.set_user_attr(f"test_loss_{loss_type}", test_loss_list[-1].item())
 
+        # save metrics
         for metric_name, metric_value in metrics_dict.items():
             trial.set_user_attr(metric_name, metric_value[-1].item())
 
-        return val_loss_list[-1].item()
+        # evaluate on each action separately
+        for action in tqdm(["walking", "eating", "smoking", "discussion", "directions",
+                       "greeting", "phoning", "posing", "purchases", "sitting",
+                       "sittingdown", "takingphoto", "waiting", "walkingdog",
+                       "walkingtogether"], desc='evaluating metrics on each action'):
+            args_action = copy.deepcopy(args)
+            args_action.actions_to_consider = action
+            print(f'evaluating metrics on action {action}')
+
+            if args.loss_type == 'mpjpe':
+                action_mpjpe_loss, action_auc_pck = train_mixer_h36m.test_mpjpe(model, args_action, model_name,
+                                                                                save_results=False)
+                trial.set_user_attr(f"{action}/mpjpe", action_mpjpe_loss.item())
+                trial.set_user_attr(f"{action}/auc_pck", action_auc_pck.item())
+            elif args.loss_type == 'angle':
+                action_euler_angle_loss, action_joint_angle_loss = train_mixer_h36m.test_angle(model, args_action)
+                trial.set_user_attr(f"{action}/euler_angle", action_euler_angle_loss.item())
+                trial.set_user_attr(f"{action}/joint_angle", action_joint_angle_loss.item())
+
+        return test_loss_list[-1].item()
 
     def __call__(self, trial):
         args = self.parse_args()
         args, trial = self.overwrite_optuna_params(args, trial)
 
         # train with mpjpe loss
-        val_loss_mpjpe = self.train_model_with_loss(args, trial, loss_type='mpjpe', pose_dim=66)
+        test_loss_mpjpe = self.train_model_with_loss(args, trial, loss_type='mpjpe', pose_dim=66)
 
         # train with angle loss
-        val_loss_angle = self.train_model_with_loss(args, trial, loss_type='angle', pose_dim=48)
+        test_loss_angle = self.train_model_with_loss(args, trial, loss_type='angle', pose_dim=48)
 
-        return val_loss_mpjpe, val_loss_angle
+        return test_loss_mpjpe, test_loss_angle
 
 
 if __name__ == '__main__':
@@ -284,7 +318,8 @@ if __name__ == '__main__':
         base_folder = f'/home/user/bornhaup/FinalProject/MotionMixerConv/studies'
     else:
         raise ValueError('User not supported')
-    study_name = 'h36m_n_blocks=4_reg=-1_out_nTP=10_skip=2'
+    study_name = 'h36m_reg=-1_out_nTP=10_skip=1_fullSpace_testMetrics'
+    # study_name = 'test on each action'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):
@@ -299,16 +334,25 @@ if __name__ == '__main__':
         storage=f"sqlite:///{base_folder}/{study_name}/results.db",
         directions=["minimize", "minimize"],
         load_if_exists=True,
-        sampler=optuna.samplers.GridSampler({
-            'dimPosEmb': [64, 128],
-            'channels_conv_blocks': [8, 16],
-            'kernel1_x_Time': [1, 3, 5],
-            'kernel1_y_Pose': [1, 9, 15],
-            'encoder_n_harmonic_functions': [0, 64],
-        })
+        # sampler=optuna.samplers.GridSampler({
+        #     'dimPosEmb': [64, 128],
+        #     'channels_conv_blocks': [8, 16],
+        #     'kernel1_x_Time': [1, 3, 5],
+        #     'kernel1_y_Pose': [1, 9, 15],
+        #     'num_blocks': [2, 4, 8],
+        #
+        #     'encoder_n_harmonic_functions': [0],
+        #     'encoder_omega0': [0.1],
+        #     # 'dimPosEmb': [128],
+        #     # 'channels_conv_blocks': [16],
+        #     # 'kernel1_x_Time': [3],
+        #     # 'kernel1_y_Pose': [1],
+        #     # 'encoder_n_harmonic_functions': [0],
+        #     # 'encoder_omega0': [0.1],
+        # })
     )
     # To use the dashboard, run the following command:
-    # optuna-dashboard sqlite:////home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies/example-study/results.db
+    # optuna-dashboard sqlite:////home/azhuavlev/Desktop/Results/CUDA_lab/Final_project/studies/h36m_reg=-1_out_nTP=10_skip=1_fullSpace_testMetrics/results.db
     # respectively: optuna-dashboard sqlite:////home/user/bornhaup/FinalProject/MotionMixerConv/studies/example-study_out_nTP=20/results.db
     # then: ssh -L 8080:127.0.0.1:8080 cuda4
 

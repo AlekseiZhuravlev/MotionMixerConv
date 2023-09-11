@@ -373,6 +373,7 @@ class ConvMixer(nn.Module):
                  r_se:int = 4, 
                  use_max_pooling:bool = False,
                  encoder_n_harmonic_functions:int = 64,
+                 encoder_omega0:float = 0.1
                  ):
         
         super().__init__()
@@ -393,7 +394,7 @@ class ConvMixer(nn.Module):
             dimPosEmb=self.dimPosEmb,
             conv_nChan=self.conv_nChan,
             n_harmonic_functions=encoder_n_harmonic_functions,
-            omega0=0.1
+            omega0=encoder_omega0,
         )
         
         self.Mixer_Block = nn.ModuleList(

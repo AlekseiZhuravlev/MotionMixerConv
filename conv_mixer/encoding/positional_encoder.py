@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class PoseEncoder(nn.Module):
-    def __init__(self, dimPosIn, in_nTP, dimPosEmb, conv_nChan, n_harmonic_functions, omega0=0.1):
+    def __init__(self, dimPosIn, in_nTP, dimPosEmb, conv_nChan, n_harmonic_functions, omega0):
         """
         Encoding of the joint position coordinates, with an optional harmonic embedding.
 
@@ -66,7 +66,7 @@ class PoseEncoder(nn.Module):
     def forward(self, x):
         """
         Args:
-            x: tensor of shape [bs, 1, in_nTP, dimPosIn]
+            x: tensor of shape [bs, in_nTP, dimPosIn]
         Returns:
             embedding: a harmonic embedding of `x`
                 of shape [bs, conv_nChan, in_nTP, dimPosEmb = n_harmonic_functions * dim * 2]
