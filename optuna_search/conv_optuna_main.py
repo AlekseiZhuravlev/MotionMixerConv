@@ -199,7 +199,7 @@ class Objective:
 
     def overwrite_optuna_params(self, args, trial):
         # NOTE: this will be overriden by GridSampler
-        args.dimPosEmb = trial.suggest_int('dimPosEmb', 64, 224, step=32)
+        args.dimPosEmb = trial.suggest_int('dimPosEmb', 192, 192, step=32)
         args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 4, 16, step=4)
         args.kernel1_x_Time = trial.suggest_int('kernel1_x_Time', 1, 9, step=4)
         args.kernel1_y_Pose = trial.suggest_int('kernel1_y_Pose', 1, 25, step=4)
@@ -235,7 +235,7 @@ class Objective:
             encoder_n_harmonic_functions=args.encoder_n_harmonic_functions,
             encoder_omega0=args.encoder_omega0,
 
-            mode_conv="twice",
+            mode_conv="once",
             activation=args.activation,
             regularization=args.regularization,
             use_se=True,
@@ -318,7 +318,7 @@ if __name__ == '__main__':
         base_folder = f'/home/user/bornhaup/FinalProject/MotionMixerConv/studies'
     else:
         raise ValueError('User not supported')
-    study_name = 'h36m_reg=-1_out_nTP=10_skip=1_fullSpace_testMetrics'
+    study_name = 'h36m_reg=-1_out_nTP=10_skip=1_fullSpace_testMetrics_fixedPosEmb_once'
     # study_name = 'test on each action'
 
     study_path = base_folder + '/' + study_name

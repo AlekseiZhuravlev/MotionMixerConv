@@ -107,11 +107,12 @@ def train(model, model_name, args):
         running_loss = 0
         n = 0
         model.train()
-        for cnt, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
+        for cnt, batch in enumerate(data_loader):
             batch = batch.to(device)
             batch_dim = batch.shape[0]
             n += batch_dim
 
+            # create master sequence 10 + 25
             if args.loss_type == 'mpjpe':
                 sequences_train = batch[:, 0:args.input_n, dim_used].view(
                     -1, args.input_n, args.pose_dim)
@@ -124,8 +125,28 @@ def train(model, model_name, args):
 
             optimizer.zero_grad()
 
+            # for i in range(output n, step_size = step_size): 0 .. 15:
+                # subsequence_train = master_sequence[i:i+input_n]
+                # subsequence_gt = master_sequence[i+input_n:i+input_n+output_n]
+
+                # subsequence_train = subsequence_train/1000
+                # subsequences_predict = model(subsequence_train) predicts 10 frames
+
+                # take first 5 frames prediction (the model will predict 10, but we only use first 5, or 1)
+                # compute error with gt
+                # sum the loss
+                # NOT backpropagate
+                # repeat for next sliding window
+
+            # check how the loss is calculated to make sure it's consistent
+            # after for loop finishes, backpropagate
+
+            # similar for loop for test function
+
             # delta_x = whether to predict the difference between 2 frames
+            # NOT USED
             if args.delta_x:
+                raise NotImplementedError('Aleksei: do not use this')
                 # ??? unclear
                 sequences_all = torch.cat((sequences_train, sequences_gt), 1)
                 sequences_all_delta = [
