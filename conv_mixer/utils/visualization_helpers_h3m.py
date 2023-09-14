@@ -66,7 +66,7 @@ def visualize_batch_single_h3m(batch_full):
 
 
 
-def visualize_batch(batch_full, save_path, batch_gt):
+def visualize_batch(batch_full, save_path, batch_gt, batch_train):
     # ignore constant joints and joints at same position with other joints
     joint_to_ignore = np.array([0, 1, 6, 11, 16, 20, 23, 24, 28, 31])
     dimensions_to_ignore = np.concatenate((joint_to_ignore * 3, joint_to_ignore * 3 + 1, joint_to_ignore * 3 + 2))
@@ -89,6 +89,15 @@ def visualize_batch(batch_full, save_path, batch_gt):
         ys_gt = -zs_raw_gt.numpy()
         zs_gt = ys_raw_gt.numpy()
 
+    if batch_train is not None:
+        xs_raw_train = batch_train[:, ::3] / 1000
+        ys_raw_train = batch_train[:, 1::3] / 1000
+        zs_raw_train = batch_train[:, 2::3] / 1000
+
+        xs_train = xs_raw_train.numpy()
+        ys_train = -zs_raw_train.numpy()
+        zs_train = ys_raw_train.numpy()
+
     connect = np.array([
         (1, 2), (2, 3), (3, 4), (4, 5),
         (6, 7), (7, 8), (8, 9), (9, 10),
@@ -107,6 +116,35 @@ def visualize_batch(batch_full, save_path, batch_gt):
     ax.set_zlabel('Z')
 
     images = []
+
+    # draw training data
+    if batch_gt is not None:
+        for j in range(batch_train.shape[0]):
+            ax.clear()
+
+            ax.set_xlim3d([xs.min(), xs.max()])
+            ax.set_xlabel('X')
+            #
+            ax.set_ylim3d([ys.min(), ys.max()])
+            ax.set_ylabel('Y')
+            #
+            ax.set_zlim3d([zs.min(), zs.max()])
+            ax.set_zlabel('Z')
+
+            ax.scatter(xs_train[j, dimensions_to_use // 3], ys_train[j, dimensions_to_use // 3],
+                          zs_train[j, dimensions_to_use // 3], c='green', label='gt')
+            for i in range(len(connect)):
+                ax.plot(xs_train[j][connect[i]], ys_train[j][connect[i]], zs_train[j][connect[i]], c='green')
+                # make legend
+
+            ax.set_title('Input')
+
+            fig.canvas.draw()
+            image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            images.append(image_from_plot)
+
+    # draw predicted data
     for j in range(batch_full.shape[0]):
         ax.clear()
         ax.scatter(xs[j, dimensions_to_use // 3], ys[j, dimensions_to_use // 3],
@@ -131,6 +169,7 @@ def visualize_batch(batch_full, save_path, batch_gt):
                 ax.plot(xs_gt[j][connect[i]], ys_gt[j][connect[i]], zs_gt[j][connect[i]], c='green')
             # make legend
 
+        ax.set_title('Prediction')
 
         fig.canvas.draw()
         image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)

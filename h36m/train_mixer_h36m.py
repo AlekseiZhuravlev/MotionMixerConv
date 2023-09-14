@@ -323,6 +323,8 @@ def test_mpjpe(model, args, model_name, save_results):
                 batch_dim = batch.shape[0]
                 n += batch_dim
 
+                all_joints_input = batch.clone(
+                )[:, :args.input_n, :]
                 all_joints_seq = batch.clone(
                 )[:, args.input_n:args.input_n+args.output_n, :]
                 all_joints_seq_gt = batch.clone(
@@ -357,6 +359,11 @@ def test_mpjpe(model, args, model_name, save_results):
                     sequences_predict = model(sequences_train)
                     loss = mpjpe_error(sequences_predict, sequences_gt)
 
+
+            all_joints_input[:, :, dim_used] = sequences_train * 1000
+            all_joints_input[:, :,
+                            index_to_ignore] = all_joints_input[:, :, index_to_equal]
+
             all_joints_seq[:, :, dim_used] = sequences_predict
             all_joints_seq[:, :,
                            index_to_ignore] = all_joints_seq[:, :, index_to_equal]
@@ -385,11 +392,17 @@ def test_mpjpe(model, args, model_name, save_results):
             accum_loss += loss*batch_dim
 
             if save_results and cnt in sequences_to_save:
+
+                # print('batch_full', all_joints_seq[10].cpu().shape)
+                # print('batch_gt', all_joints_seq_gt[10].cpu().shape)
+                # print('batch_train', all_joints_input[10].cpu().shape)
+
                 os.makedirs(os.path.join(args.save_path, model_name, 'visualization'), exist_ok=True)
                 visualize_batch(
-                    all_joints_seq[10].cpu(),
-                    os.path.join(args.save_path, model_name, 'visualization', f'{action}_{cnt}_10.gif'),
-                    all_joints_seq_gt[10].cpu()
+                    batch_full=all_joints_seq[10].cpu(),
+                    save_path=os.path.join(args.save_path, model_name, 'visualization', f'{action}_{cnt}_10.gif'),
+                    batch_gt=all_joints_seq_gt[10].cpu(),
+                    batch_train=all_joints_input[10].cpu()
                 )
 
         n_batches += n
@@ -416,6 +429,10 @@ def test_angle(model, args):
         running_loss=0
         n=0
         dataset_test = H36M_Dataset_Angle(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=2,actions=[action])
+
+        # dataset_test = H36M_Dataset_Angle(args.data_dir,args.input_n,
+        # args.output_n_frames_dataset,
+        # args.skip_rate, split=2,actions=[action])
         #print('>>> Test dataset length: {:d}'.format(dataset_test.__len__()))
 
         test_loader = DataLoader(dataset_test, batch_size=args.batch_size_test, shuffle=False, num_workers=0, pin_memory=True)
@@ -555,6 +572,8 @@ if __name__ == '__main__':
                  dimPosOut=args.pose_dim, 
                  in_nTP=args.input_n,
                  out_nTP=args.output_n,
+
+                 # out_nTP=args.output_n_frames_model = 5
                  conv_nChan=1, # TODO: Implement arg-parsing
                  conv1_kernel_shape=(1,3), # TODO: Implement arg-parsing
                  conv1_stride=(1,1), # TODO: Implement arg-parsing

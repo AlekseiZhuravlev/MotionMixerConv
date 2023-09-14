@@ -66,6 +66,15 @@ class Objective:
         # sequence lengths
         parser.add_argument('--input_n', type=int, default=10, help="number of model's input frames")
         parser.add_argument('--output_n', type=int, default=10, help="number of model's output frames")
+
+        # autoregressive
+        # parser.add_argument('--output_n_frames_model', type=int, default=5, help="number of model's output frames")
+        # parser.add_argument('--output_n_frames_dataset', type=int, default=25, help="number of model's output frames")
+
+        # regular
+        # parser.add_argument('--output_n_frames_model', type=int, default=10, help="number of model's output frames")
+        # parser.add_argument('--output_n_frames_dataset', type=int, default=10, help="number of model's output frames")
+
         parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5],
                             help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
         parser.add_argument('--actions_to_consider', default='all',
@@ -200,10 +209,10 @@ class Objective:
     def overwrite_optuna_params(self, args, trial):
         # NOTE: this will be overriden by GridSampler
         args.dimPosEmb = trial.suggest_int('dimPosEmb', 192, 192, step=32)
-        args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 4, 16, step=4)
+        args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 8, 8, step=4)
         args.kernel1_x_Time = trial.suggest_int('kernel1_x_Time', 1, 9, step=4)
         args.kernel1_y_Pose = trial.suggest_int('kernel1_y_Pose', 1, 25, step=4)
-        args.num_blocks = trial.suggest_int('num_blocks', 2, 6, step=2)
+        args.num_blocks = trial.suggest_int('num_blocks', 6, 6, step=2)
 
         # disabled
         # args.encoder_n_harmonic_functions = trial.suggest_categorical('encoder_n_harmonic_functions', [0])
@@ -235,7 +244,7 @@ class Objective:
             encoder_n_harmonic_functions=args.encoder_n_harmonic_functions,
             encoder_omega0=args.encoder_omega0,
 
-            mode_conv="once",
+            mode_conv="twice",
             activation=args.activation,
             regularization=args.regularization,
             use_se=True,
@@ -318,8 +327,8 @@ if __name__ == '__main__':
         base_folder = f'/home/user/bornhaup/FinalProject/MotionMixerConv/studies'
     else:
         raise ValueError('User not supported')
-    study_name = 'h36m_reg=-1_out_nTP=10_skip=1_fullSpace_testMetrics_fixedPosEmb_once'
-    # study_name = 'test on each action'
+    study_name = 'h36m_reg=-1_out_nTP=10_skip=1_fullSpace_testMetrics_onlyKernels_twice'
+    # study_name = 'test_input_plots'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):

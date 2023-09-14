@@ -47,7 +47,7 @@ def visualize_batch_single_ais(batch_full):
 
         ax.plot(lxs, lys, lzs)
 
-def make_animation_ais(batch_full, add_title, add_joint_names):
+def make_animation_ais(batch_full, add_title, add_joint_names, save_name):
     xs = batch_full[:, ::3]
     ys = batch_full[:, 1::3]
     zs = batch_full[:, 2::3]
@@ -107,7 +107,7 @@ def make_animation_ais(batch_full, add_title, add_joint_names):
     ani = animation.ArtistAnimation(fig, ims, interval=50, repeat_delay=0, blit=True)
 
     # save animation as gif
-    ani.save('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/animation_ais.gif', writer='pillow')
+    ani.save(f'/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/{save_name}.gif', writer='pillow')
 
     # save animation as mp4
     # ani.save('/home/azhuavlev/PycharmProjects/MotionMixerConv/conv_mixer/animation_ais.mp4', writer='ffmpeg')
