@@ -171,6 +171,11 @@ def train(model, model_name, args):
                 loss = mpjpe_error(sequences_predict, sequences_gt)
 
             elif args.loss_type == 'mpjpe':
+
+                # print('sequences_train', sequences_train)
+                # print('sequences_gt', sequences_gt)
+                # exit(0)
+
                 sequences_train = sequences_train/1000
                 sequences_predict = model(sequences_train)
                 loss = mpjpe_error(sequences_predict, sequences_gt)

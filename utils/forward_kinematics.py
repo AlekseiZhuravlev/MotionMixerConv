@@ -229,11 +229,32 @@ def fkl_torch(angles, parent, offset, rotInd, expmapInd):
     p3d = Variable(torch.from_numpy(offset)).float().cuda().unsqueeze(0).repeat(n, 1, 1)
     angles = angles[:, 3:].contiguous().view(-1, 3)
     R = data_utils.expmap2rotmat_torch(angles).view(n, j_n, 3, 3)
+
     for i in np.arange(1, j_n):
         if parent[i] > 0:
-            R[:, i, :, :] = torch.matmul(R[:, i, :, :], R[:, parent[i], :, :]).clone()
-            p3d[:, i, :] = torch.matmul(p3d[0, i, :], R[:, parent[i], :, :]) + p3d[:, parent[i], :]
+            R[:, i, :, :] = torch.matmul(
+                R[:, i, :, :],
+                R[:, parent[i], :, :]
+            ).clone()
+
+            p3d[:, i, :] = torch.matmul(
+                p3d[0, i, :],
+                R[:, parent[i], :, :]
+            ) + p3d[:, parent[i], :]
     return p3d
+
+#     r = angles[expmapInd[i]]
+#
+#     thisRotation = data_utils.expmap2rotmat(r)
+#
+#     if parent[i] == -1:  # Root node
+#         xyzStruct[i]['rotation'] = thisRotation
+#         xyzStruct[i]['xyz'] = np.reshape(offset[i, :], (1, 3)) + thisPosition
+#     else:
+#         xyzStruct[i]['xyz'] = (offset[i, :] + thisPosition).dot(xyzStruct[parent[i]]['rotation']) + \
+#                               xyzStruct[parent[i]]['xyz']
+#         xyzStruct[i]['rotation'] = thisRotation.dot(xyzStruct[parent[i]]['rotation'])
+
 
 
 def main():

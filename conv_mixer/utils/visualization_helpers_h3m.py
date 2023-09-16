@@ -132,9 +132,9 @@ def visualize_batch(batch_full, save_path, batch_gt, batch_train):
             ax.set_zlabel('Z')
 
             ax.scatter(xs_train[j, dimensions_to_use // 3], ys_train[j, dimensions_to_use // 3],
-                          zs_train[j, dimensions_to_use // 3], c='green', label='gt')
+                          zs_train[j, dimensions_to_use // 3], c='#07529a', label='gt')
             for i in range(len(connect)):
-                ax.plot(xs_train[j][connect[i]], ys_train[j][connect[i]], zs_train[j][connect[i]], c='green')
+                ax.plot(xs_train[j][connect[i]], ys_train[j][connect[i]], zs_train[j][connect[i]], c='#07529a')
                 # make legend
 
             ax.set_title('Input')
@@ -147,12 +147,21 @@ def visualize_batch(batch_full, save_path, batch_gt, batch_train):
     # draw predicted data
     for j in range(batch_full.shape[0]):
         ax.clear()
+
+        # plot ground truth
+        if batch_gt is not None:
+            ax.scatter(xs_gt[j, dimensions_to_use // 3], ys_gt[j, dimensions_to_use // 3],
+                          zs_gt[j, dimensions_to_use // 3], c='#07529a', label='gt')
+            for i in range(len(connect)):
+                ax.plot(xs_gt[j][connect[i]], ys_gt[j][connect[i]], zs_gt[j][connect[i]], c='#07529a')
+
+        # plot prediction
         ax.scatter(xs[j, dimensions_to_use // 3], ys[j, dimensions_to_use // 3],
-                   zs[j, dimensions_to_use // 3], c='blue')
-
+                   zs[j, dimensions_to_use // 3], c='#eab90c')
         for i in range(len(connect)):
-            ax.plot(xs[j][connect[i]], ys[j][connect[i]], zs[j][connect[i]], c='blue')
+            ax.plot(xs[j][connect[i]], ys[j][connect[i]], zs[j][connect[i]], c='#eab90c')
 
+        # set the scales
         ax.set_xlim3d([xs.min(), xs.max()])
         ax.set_xlabel('X')
         #
@@ -161,13 +170,6 @@ def visualize_batch(batch_full, save_path, batch_gt, batch_train):
         #
         ax.set_zlim3d([zs.min(), zs.max()])
         ax.set_zlabel('Z')
-
-        if batch_gt is not None:
-            ax.scatter(xs_gt[j, dimensions_to_use // 3], ys_gt[j, dimensions_to_use // 3],
-                          zs_gt[j, dimensions_to_use // 3], c='green', label='gt')
-            for i in range(len(connect)):
-                ax.plot(xs_gt[j][connect[i]], ys_gt[j][connect[i]], zs_gt[j][connect[i]], c='green')
-            # make legend
 
         ax.set_title('Prediction')
 

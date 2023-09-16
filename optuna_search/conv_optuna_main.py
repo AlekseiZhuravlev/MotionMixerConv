@@ -15,6 +15,7 @@ elif USER_NAME == "v":
     sys.path.append('/home/user/bornhaup/FinalProject/MotionMixerConv')
 
 import h36m.train_mixer_h36m as train_mixer_h36m
+import h36m.train_mixer_ais as train_mixer_ais
 from h36m.conv_mixer_model import ConvMixer
 import shutil
 
@@ -95,6 +96,8 @@ class Objective:
         ############################################################################
 
         # epochs / checkpoints
+
+        parser.add_argument('--dataset_type', default='ais', type=str, choices=['h36m', 'ais'], required=False)
         parser.add_argument('--n_epochs', default=50, type=int, required=False) # 50
         parser.add_argument('--load_checkpoint', default=False, type=bool, required=False)
 
@@ -198,12 +201,6 @@ class Objective:
         args.encoder_n_harmonic_functions = 0
         args.encoder_omega0 = 0
 
-        # if args.loss_type == 'angle' and args.delta_x:
-        #     raise ValueError('Delta_x and loss type angle cant be used together.')
-        # assert args.kernel1_x_Time <= args.input_n, "Kernel 1 has wrong size in x dim" # input_n == in_nTP
-        # assert args.kernel1_y_Pose <= args.dimPosEmb, "Kernel 1 has wrong size in y dim"
-        # assert args.kernel2_x_Time <= args.input_n, "Kernel 2 has wrong size in x dim" # input_n == in_nTP
-        # assert args.kernel2_y_Pose <= args.dimPosEmb, "Kernel 2 has wrong size in y dim"
         return args
 
     def overwrite_optuna_params(self, args, trial):
@@ -306,17 +303,109 @@ class Objective:
 
         return test_loss_list[-1].item()
 
+
+    def train_model_ais(self, args, trial, loss_type, pose_dim):
+
+        ############################################################################
+        # Train with mpjpe loss
+        ############################################################################
+
+        args.loss_type = loss_type
+        args.delta_x = False
+        args.pose_dim = pose_dim
+
+        model = ConvMixer(
+            # not optimizable
+            dimPosIn=args.pose_dim,
+            dimPosOut=args.pose_dim,
+            in_nTP=args.input_n,
+            out_nTP=args.output_n,
+
+            # optimizable
+            num_blocks=args.num_blocks,
+            dimPosEmb=args.dimPosEmb,
+            conv_nChan=args.channels_conv_blocks,
+            conv1_kernel_shape=(args.kernel1_x_Time, args.kernel1_y_Pose),
+            encoder_n_harmonic_functions=args.encoder_n_harmonic_functions,
+            encoder_omega0=args.encoder_omega0,
+
+            mode_conv="twice",
+            activation=args.activation,
+            regularization=args.regularization,
+            use_se=True,
+            r_se=args.r_se,
+            use_max_pooling=False,
+        ).to(args.dev)
+
+        print(args)
+        print('total number of parameters of the network is: ' +
+              str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
+
+        model_name = f'ais_{args.loss_type}_' \
+                        f'input_n={args.input_n}_' \
+                        f'output_n={args.output_n}_' \
+                        f'skip_rate={args.skip_rate}_' \
+                        f'actions_to_consider={args.actions_to_consider}_' \
+                        f'num_blocks={args.num_blocks}_' \
+                        f'regularization={args.regularization}_' \
+                     f'hidden_dim={args.dimPosEmb}_' \
+                     f'k1x={args.kernel1_x_Time}_' \
+                     f'k1y={args.kernel1_y_Pose}_' \
+                     f'channels_conv_blocks={args.channels_conv_blocks}_' \
+                     f'encoder_n_harmonic_functions={args.encoder_n_harmonic_functions}_' \
+                     f'encoder_omega0={args.encoder_omega0}_'
+
+        train_loss_list, val_loss_list, test_loss_list, metrics_dict = train_mixer_ais.train(model, model_name, args)
+
+        # save gif of the predictions
+        if args.loss_type == 'mpjpe':
+            train_mixer_ais.test_mpjpe(model, args, model_name, save_results=True)
+
+        # IMPORTANT: we will optimize val_loss, and report train_loss and test_loss
+        trial.set_user_attr(f"train_loss_{loss_type}", train_loss_list[-1].item())
+        trial.set_user_attr(f"val_loss_{loss_type}", val_loss_list[-1].item())
+        trial.set_user_attr(f"test_loss_{loss_type}", test_loss_list[-1].item())
+
+        # save metrics
+        for metric_name, metric_value in metrics_dict.items():
+            trial.set_user_attr(metric_name, metric_value[-1].item())
+
+        # evaluate on each action separately
+        for action in tqdm([
+                '2021-08-04-singlePerson_000',
+                '2021-08-04-singlePerson_001',
+                '2021-08-04-singlePerson_002',
+                '2021-08-04-singlePerson_003',
+                '2022-05-26_2persons_000',
+                '2022-05-26_2persons_001',
+                '2022-05-26_2persons_002',
+                '2022-05-26_2persons_003'
+            ], desc='evaluating metrics on each action'):
+
+            args_action = copy.deepcopy(args)
+            args_action.actions_to_consider = action
+            print(f'evaluating metrics on action {action}')
+
+            if args.loss_type == 'mpjpe':
+                action_mpjpe_loss, action_auc_pck = train_mixer_ais.test_mpjpe(model, args_action, model_name,
+                                                                                save_results=True)
+                trial.set_user_attr(f"{action}/mpjpe", action_mpjpe_loss.item())
+                trial.set_user_attr(f"{action}/auc_pck", action_auc_pck.item())
+
+        return test_loss_list[-1].item()
+
     def __call__(self, trial):
+
         args = self.parse_args()
         args, trial = self.overwrite_optuna_params(args, trial)
 
-        # train with mpjpe loss
-        test_loss_mpjpe = self.train_model_with_loss(args, trial, loss_type='mpjpe', pose_dim=66)
-
-        # train with angle loss
-        test_loss_angle = self.train_model_with_loss(args, trial, loss_type='angle', pose_dim=48)
-
-        return test_loss_mpjpe, test_loss_angle
+        if args.dataset_type == 'h36m':
+            test_loss_mpjpe = self.train_model_with_loss(args, trial, loss_type='mpjpe', pose_dim=66)
+            test_loss_angle = self.train_model_with_loss(args, trial, loss_type='angle', pose_dim=48)
+            return test_loss_mpjpe, test_loss_angle
+        else:
+            test_loss_mpjpe = self.train_model_ais(args, trial, loss_type='mpjpe', pose_dim=33)
+            return test_loss_mpjpe
 
 
 if __name__ == '__main__':
@@ -327,8 +416,8 @@ if __name__ == '__main__':
         base_folder = f'/home/user/bornhaup/FinalProject/MotionMixerConv/studies'
     else:
         raise ValueError('User not supported')
-    study_name = 'h36m_reg=-1_out_nTP=10_skip=1_fullSpace_testMetrics_onlyKernels_twice'
-    # study_name = 'test_input_plots'
+    study_name = 'ais_reg=-1_out_nTP=10_skip=1_onlyKernels_twice'
+    # study_name = 'ais_test'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):
@@ -341,7 +430,8 @@ if __name__ == '__main__':
     study = optuna.create_study(
         study_name=study_name,
         storage=f"sqlite:///{base_folder}/{study_name}/results.db",
-        directions=["minimize", "minimize"],
+        # directions=["minimize", "minimize"],
+        directions=["minimize"],
         load_if_exists=True,
         # sampler=optuna.samplers.GridSampler({
         #     'dimPosEmb': [64, 128],
@@ -368,7 +458,7 @@ if __name__ == '__main__':
     study.optimize(
         Objective(f'{base_folder}/{study_name}'),
         # direction="minimize",
-        # n_trials=2,
+        n_trials=1,
         timeout=60 * 60 * 47,  # 47 hours,
         catch=(Exception,),
     )

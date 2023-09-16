@@ -160,7 +160,7 @@ class DatasetAISxyz(torch.utils.data.Dataset):
         df_smooth = df.ewm(alpha=self.smoothing_alpha, axis=0, ignore_na=False).mean()
 
         # return df as tensor
-        return torch.tensor(df_smooth.values)
+        return torch.tensor(df_smooth.values, dtype=torch.float32)
 
 
     def __len__(self):
@@ -171,7 +171,7 @@ class DatasetAISxyz(torch.utils.data.Dataset):
 
         # joint_coords = torch.stack(self.action_data[action][start_frame:end_frame])
         joint_coords = self.action_data[action][start_frame:end_frame]
-        return joint_coords
+        return joint_coords #* 1000
 
 
 if __name__ == '__main__':

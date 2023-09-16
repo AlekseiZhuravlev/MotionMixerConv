@@ -70,7 +70,9 @@ class H36M_Dataset_Angle(Dataset):
                         the_sequence = np.array(the_sequence[even_list, :])
                         # the_sequence = torch.from_numpy(the_sequence).float().cuda()
                         # remove global rotation and translation
+
                         the_sequence[:, 0:6] = 0
+
                         # p3d = data_utils.expmap2xyz_torch(the_sequence)
                         self.seq[(subj, action, subact)] = the_sequence
 
@@ -89,7 +91,9 @@ class H36M_Dataset_Angle(Dataset):
                     num_frames1 = len(even_list)
                     the_sequence1 = np.array(the_sequence1[even_list, :])
                     # the_seq1 = torch.from_numpy(the_sequence1).float().cuda()
+
                     the_sequence1[:, 0:6] = 0
+
                     # p3d1 = data_utils.expmap2xyz_torch(the_seq1)
                     self.seq[(subj, action, 1)] = the_sequence1
 
@@ -102,7 +106,9 @@ class H36M_Dataset_Angle(Dataset):
                     num_frames2 = len(even_list)
                     the_sequence2 = np.array(the_sequence2[even_list, :])
                     # the_seq2 = torch.from_numpy(the_sequence2).float().cuda()
+
                     the_sequence2[:, 0:6] = 0
+
                     # p3d2 = data_utils.expmap2xyz_torch(the_seq2)
                     self.seq[(subj, action, 2)] = the_sequence2
 

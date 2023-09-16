@@ -571,7 +571,23 @@ def expmap2xyz_torch(expmap):
     """
     parent, offset, rotInd, expmapInd = forward_kinematics._some_variables()
     xyz = forward_kinematics.fkl_torch(expmap, parent, offset, rotInd, expmapInd)
+
     return xyz
+
+def expmap2xyz_torch_slow(expmap):
+    """
+    convert expmaps to joint locations
+    :param expmap: N*99
+    :return: N*32*3
+    """
+    parent, offset, rotInd, expmapInd = forward_kinematics._some_variables()
+
+    xyz_global = torch.tensor([])
+    for i in range(expmap.shape[0]):
+        xyz_i = forward_kinematics.fkl(expmap[i].cpu(), parent, offset, rotInd, expmapInd)
+        xyz_global = torch.cat((xyz_global, torch.tensor(xyz_i).unsqueeze(0)), dim=0)
+
+    return xyz_global.float().cuda()
 
 
 def get_dct_matrix(N):
