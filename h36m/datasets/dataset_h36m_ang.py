@@ -128,6 +128,7 @@ class H36M_Dataset_Angle(Dataset):
                     self.data_idx.extend(zip(tmp_data_idx_1, tmp_data_idx_2))
 
     def __len__(self):
+        return len(self.data_idx)
         return np.shape(self.data_idx)[0]
 
     def __getitem__(self, item):
