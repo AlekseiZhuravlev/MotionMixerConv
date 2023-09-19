@@ -185,10 +185,6 @@ class Objective:
             '--regularization', # -1 for BatchNorm1d, 0 for no regularization, 0.1 for Dropout(0.1)
             default=-1.0,
             choices=[-1, 0, 0.1], type=float, required=False)
-        # parser_loss.add_argument(
-        #     '--conv_mode',
-        #     default='once',
-        #     choices=['once', 'twice'], type=str, required=False)
 
         # args.encoder_n_harmonic_functions = trial.suggest_categorical('encoder_n_harmonic_functions', [0])
         # args.encoder_omega0 = trial.suggest_categorical('encoder_omega0', [0.1])
@@ -203,18 +199,6 @@ class Objective:
 
         return args
 
-    def overwrite_optuna_params(self, args, trial):
-        # NOTE: this will be overriden by GridSampler
-        args.dimPosEmb = trial.suggest_int('dimPosEmb', 192, 192, step=32)
-        args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 8, 8, step=4)
-        args.kernel1_x_Time = trial.suggest_int('kernel1_x_Time', 1, 9, step=4)
-        args.kernel1_y_Pose = trial.suggest_int('kernel1_y_Pose', 1, 25, step=4)
-        args.num_blocks = trial.suggest_int('num_blocks', 6, 6, step=2)
-
-        # disabled
-        # args.encoder_n_harmonic_functions = trial.suggest_categorical('encoder_n_harmonic_functions', [0])
-        # args.encoder_omega0 = trial.suggest_categorical('encoder_omega0', [0.1])
-        return args, trial
 
     def train_model_with_loss(self, args, trial, loss_type, pose_dim):
 
@@ -241,7 +225,7 @@ class Objective:
             encoder_n_harmonic_functions=args.encoder_n_harmonic_functions,
             encoder_omega0=args.encoder_omega0,
 
-            mode_conv="twice",
+            mode_conv="once",
             activation=args.activation,
             regularization=args.regularization,
             use_se=True,
@@ -329,7 +313,7 @@ class Objective:
             encoder_n_harmonic_functions=args.encoder_n_harmonic_functions,
             encoder_omega0=args.encoder_omega0,
 
-            mode_conv="twice",
+            mode_conv="once",
             activation=args.activation,
             regularization=args.regularization,
             use_se=True,
@@ -405,7 +389,21 @@ class Objective:
             return test_loss_mpjpe, test_loss_angle
         else:
             test_loss_mpjpe = self.train_model_ais(args, trial, loss_type='mpjpe', pose_dim=33)
+            # test_loss_mpjpe = self.train_model_ais(args, trial, loss_type='mpjpe', pose_dim=57)
             return test_loss_mpjpe
+
+    def overwrite_optuna_params(self, args, trial):
+        # NOTE: this will be overriden by GridSampler
+        args.dimPosEmb = trial.suggest_int('dimPosEmb', 192, 192, step=32)
+        args.channels_conv_blocks = trial.suggest_int('channels_conv_blocks', 8, 8, step=4)
+        args.kernel1_x_Time = trial.suggest_int('kernel1_x_Time', 1, 9, step=4)
+        args.kernel1_y_Pose = trial.suggest_int('kernel1_y_Pose', 1, 29, step=4)
+        args.num_blocks = trial.suggest_int('num_blocks', 6, 6, step=2)
+
+        # disabled
+        # args.encoder_n_harmonic_functions = trial.suggest_categorical('encoder_n_harmonic_functions', [0])
+        # args.encoder_omega0 = trial.suggest_categorical('encoder_omega0', [0.1])
+        return args, trial
 
 
 if __name__ == '__main__':
@@ -416,8 +414,9 @@ if __name__ == '__main__':
         base_folder = f'/home/user/bornhaup/FinalProject/MotionMixerConv/studies'
     else:
         raise ValueError('User not supported')
-    study_name = 'ais_reg=-1_out_nTP=10_skip=1_onlyKernels_twice'
-    # study_name = 'ais_test'
+    # study_name = 'h36m_reg=-1_out_nTP=10_skip=1_onlyKernels_once'
+    study_name = 'ais_local_once'
+    # study_name = 'h36m_mlp_twice'
 
     study_path = base_folder + '/' + study_name
     if os.path.exists(study_path):
@@ -433,6 +432,7 @@ if __name__ == '__main__':
         # directions=["minimize", "minimize"],
         directions=["minimize"],
         load_if_exists=True,
+        sampler=optuna.samplers.BruteForceSampler()
         # sampler=optuna.samplers.GridSampler({
         #     'dimPosEmb': [64, 128],
         #     'channels_conv_blocks': [8, 16],
@@ -458,7 +458,7 @@ if __name__ == '__main__':
     study.optimize(
         Objective(f'{base_folder}/{study_name}'),
         # direction="minimize",
-        n_trials=1,
+        n_trials=40,
         timeout=60 * 60 * 47,  # 47 hours,
         catch=(Exception,),
     )

@@ -104,11 +104,9 @@ class DatasetAISxyz(torch.utils.data.Dataset):
 
         joint_coords = torch.tensor(joint_coords)
 
-        # print('joint_coords.shape', joint_coords.shape)
         joint_coords = self.remove_global_rot_transl(joint_coords)
         joint_coords = joint_coords.flatten()
-        # print('joint_coords.shape', joint_coords.shape)
-        # exit()
+
 
 
         return joint_coords

@@ -117,10 +117,14 @@ def train(model, model_name, args):
         # ignore Nose, MidHip, RHip, LHip, REye, LEye, REar, LEar
 
         dim_all = np.arange(57)
+        # dim_used = dim_all
+
         joints_to_ignore = [1, 8, 9, 12, 15, 16, 17, 18]
         dims_to_ignore = np.concatenate(
             (np.array(joints_to_ignore) * 3, np.array(joints_to_ignore) * 3 + 1, np.array(joints_to_ignore) * 3 + 2))
         dim_used = np.setdiff1d(dim_all, dims_to_ignore)
+
+
 
 
 
@@ -302,6 +306,8 @@ def test_mpjpe(model, args, model_name, save_results):
         dims_to_ignore = np.concatenate(
             (np.array(joints_to_ignore) * 3, np.array(joints_to_ignore) * 3 + 1, np.array(joints_to_ignore) * 3 + 2))
         dim_used = np.setdiff1d(dim_all, dims_to_ignore)
+
+        # dim_used = dim_all
 
     elif args.loss_type == 'angle':
         raise NotImplementedError()

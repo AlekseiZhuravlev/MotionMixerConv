@@ -7,12 +7,15 @@ import torch
 
 def visualize_batch_single_ais(batch_full):
 
-    xs = batch_full[:, ::3] / 1000
-    ys = batch_full[:, 1::3] / 1000
-    zs = batch_full[:, 2::3] / 1000
+    xs = batch_full[:, ::3]
+    ys = batch_full[:, 1::3]
+    zs = batch_full[:, 2::3]
+
+    # print(xs)
 
     KPS_PARENT=[-1, 0, 1, 2, 3, 1, 5, 6, 1, 8, 9, 10, 8, 12, 13, 0, 0, 15, 16]
 
+    plt.rcParams['grid.linewidth'] = 0.2
     fig = plt.figure(figsize=(7, 7))
     ax = fig.add_subplot(111, projection='3d')
 
@@ -38,7 +41,7 @@ def visualize_batch_single_ais(batch_full):
     ax.set_zlim3d([zs.min(), zs.max()])
     ax.set_zlabel('Z')
 
-    ax.set_title('Skeleton model, AIS dataset')
+    # ax.set_title('Skeleton model, AIS dataset')
 
     for kp_idx in range(1, len(xs[j])):
         lxs = torch.stack([xs[j, KPS_PARENT[kp_idx]], xs[j, kp_idx]])

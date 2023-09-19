@@ -29,6 +29,7 @@ def visualize_batch_single_h3m(batch_full):
         (24, 14), (14, 15)
     ])
 
+    plt.rcParams['grid.linewidth'] = 0.2
     fig = plt.figure(figsize=(7, 7))
     ax = fig.add_subplot(111, projection='3d')
 
@@ -59,7 +60,7 @@ def visualize_batch_single_h3m(batch_full):
         ax.set_zlim3d([zs.min(), zs.max()])
         ax.set_zlabel('Z')
 
-        ax.set_title('Skeleton model, H3.6M dataset')
+        # ax.set_title('Skeleton model, H3.6M dataset')
 
         for i in range(len(connect)):
             ax.plot(xs[j][connect[i]], ys[j][connect[i]], zs[j][connect[i]])
