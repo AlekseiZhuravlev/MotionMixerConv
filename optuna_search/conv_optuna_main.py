@@ -110,8 +110,6 @@ class Objective:
                             help='gamma correction to the learning rate, after reaching the milestone epochs')
 
         # minor settings
-        # parser.add_argument('--initialization', type=str, default='none',
-        #                     help='none, glorot_normal, glorot_uniform, hee_normal, hee_uniform')
         parser.add_argument('--clip_grad', type=float, default=None, help='select max norm to clip gradients')
         parser.add_argument('--dev', default='cuda:0', type=str, required=False)
 
@@ -125,62 +123,6 @@ class Objective:
         parser.add_argument('--activation', default='mish', type=str, required=False)
         parser.add_argument('--r_se', default=8, type=int, required=False)
 
-
-        # ############################################################################
-        # # Loss type
-        # ############################################################################
-        #
-        # parser.add_argument('--loss_type', type=str, default='mpjpe', choices=['mpjpe', 'angle'])
-        # parser.add_argument('--delta_x', type=bool, default=False, help='predicting the difference between 2 frames')
-        #
-        # args = parser.parse_args()
-        #
-        # ############################################################################
-        # # Specific arguments for each loss type
-        # ############################################################################
-        #
-        # parser_loss = argparse.ArgumentParser(parents=[parser])  # Parameters for loss
-        # if args.loss_type == 'mpjpe':
-        #     # not optimizable
-        #     parser_loss.add_argument('--pose_dim', default=66, type=int, required=False)
-        # elif args.loss_type == 'angle':
-        #     # not optimizable
-        #     parser_loss.add_argument('--pose_dim', default=48, type=int, required=False)
-        # else:
-        #     raise ValueError('Loss type not supported')
-
-        ############################################################################
-        # Parameters optimizable by optuna
-        ############################################################################
-
-        # parser_loss.add_argument(
-        #     '--dimPosEmb',
-        #     default=50,
-        #     type=int, required=False)
-        # parser.add_argument(
-        #     '--num_blocks',
-        #     default=4,
-        #     type=int, required=False)
-        # parser_loss.add_argument(
-        #     '--channels_conv_blocks',
-        #     default=1,
-        #     type=int, required=False)
-        # parser_loss.add_argument(
-        #     '--kernel1_x_Time',
-        #     default=5,
-        #     type=int, required=False)
-        # parser_loss.add_argument(
-        #     '--kernel1_y_Pose',
-        #     default=5,
-        #     type=int, required=False)
-        # parser_loss.add_argument(
-        #     '--kernel2_x_Time',
-        #     default=5,
-        #     type=int, required=False)
-        # parser_loss.add_argument(
-        #     '--kernel2_y_Pose',
-        #     default=5,
-        #     type=int, required=False)
         parser.add_argument(
             '--regularization', # -1 for BatchNorm1d, 0 for no regularization, 0.1 for Dropout(0.1)
             default=-1.0,

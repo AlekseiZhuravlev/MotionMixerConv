@@ -10,7 +10,6 @@ class DatasetAISxyz(torch.utils.data.Dataset):
         self.input_n = input_n
         self.output_n = output_n
 
-        # TODO (Aleksei): skip_rate is not used
         self.skip_rate = skip_rate
         self.actions = actions
         self.smoothing_alpha = smoothing_alpha
@@ -112,7 +111,6 @@ class DatasetAISxyz(torch.utils.data.Dataset):
         return joint_coords
 
     def process_joint_pos(self, joint_pos):
-        # TODO (Aleksei): ask Simon about this
         return joint_pos
 
     def remove_global_rot_transl(self, joint_coords):
@@ -174,27 +172,6 @@ class DatasetAISxyz(torch.utils.data.Dataset):
 
 if __name__ == '__main__':
 
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('--integers', default=1, type=int, nargs='+',
-                        help='an integer for the accumulator')
-
-    args = parser.parse_args()
-
-    # add argument data_dir to args
-    args.data_dir = "/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses"
-
-    print(args)
-    exit(0)
-
-
-
-
-
-
-
-
     dataset = DatasetAISxyz(
         data_dir="/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses",
         input_n=10,
@@ -212,78 +189,3 @@ if __name__ == '__main__':
         ],
         smoothing_alpha=0.2
     )
-    # print names of all json files in "/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses"
-    # import os
-    # for file_name in os.listdir("/home/azhuavlev/Desktop/Data/CUDA_lab/VisionLabSS23_3DPoses"):
-    #     if file_name.endswith(".json"):
-    #         print(f'"{file_name[:-5]}",')
-
-    # # plot joint_coords as 3d plot on one subplot, and direction vectors on another subplot
-    # import matplotlib.pyplot as plt
-    # from mpl_toolkits.mplot3d import Axes3D
-    # fig = plt.figure(figsize=(10, 10))
-    #
-    # ax = fig.add_subplot(121, projection='3d')
-    # # ax.set_box_aspect([1,1,1])
-    # ax.scatter(joint_coords_local[:, 0], joint_coords_local[:, 1], joint_coords_local[:, 2])
-    #
-    # KPS_PARENT = [-1, 0, 1, 2, 3, 1, 5, 6, 1, 8, 9, 10, 8, 12, 13, 0, 0, 15, 16]
-    #
-    # xs = joint_coords_local[:, 0]
-    # ys = joint_coords_local[:, 1]
-    # zs = joint_coords_local[:, 2]
-    #
-    # print(joint_coords_local.shape)
-    #
-    # j = 0
-    # # ax.scatter(xs, ys,
-    # #            zs)
-    # # print(xs)
-    #
-    # for kp_idx in range(1, len(xs)):
-    #     # print(kp_idx)
-    #     lxs = torch.stack([xs[KPS_PARENT[kp_idx]], xs[kp_idx]])
-    #     lys = torch.stack([ys[KPS_PARENT[kp_idx]], ys[kp_idx]])
-    #     lzs = torch.stack([zs[KPS_PARENT[kp_idx]], zs[kp_idx]])
-    #
-    #     ax.plot(lxs, lys, lzs)
-    #
-    # ax.quiver(0, 0, 0, dir_right[0], dir_right[1], dir_right[2], color='r')
-    # ax.quiver(0, 0, 0, dir_up[0], dir_up[1], dir_up[2], color='g')
-    # ax.quiver(0, 0, 0, dir_forward[0], dir_forward[1], dir_forward[2],
-    #           color='b')
-    #
-    # # set xyz axes to be equal
-    # ax.set_xlim3d([-1, 1])
-    # ax.set_ylim3d([-1, 1])
-    # ax.set_zlim3d([-1, 1])
-    #
-    # #########################################################################
-    #
-    # ax = fig.add_subplot(122, projection='3d')
-    # # ax.set_box_aspect([1,1,1])
-    # ax.scatter(joint_coords_local_rotated[:, 0], joint_coords_local_rotated[:, 1], joint_coords_local_rotated[:, 2])
-    #
-    # KPS_PARENT = [-1, 0, 1, 2, 3, 1, 5, 6, 1, 8, 9, 10, 8, 12, 13, 0, 0, 15, 16]
-    #
-    # xs = joint_coords_local_rotated[:, 0]
-    # ys = joint_coords_local_rotated[:, 1]
-    # zs = joint_coords_local_rotated[:, 2]
-    #
-    # for kp_idx in range(1, len(xs)):
-    #     # print(kp_idx)
-    #     lxs = torch.stack([xs[KPS_PARENT[kp_idx]], xs[kp_idx]])
-    #     lys = torch.stack([ys[KPS_PARENT[kp_idx]], ys[kp_idx]])
-    #     lzs = torch.stack([zs[KPS_PARENT[kp_idx]], zs[kp_idx]])
-    #
-    #     ax.plot(lxs, lys, lzs)
-    #
-    # # set xyz axes to be equal
-    # ax.set_xlim3d([-1, 1])
-    # ax.set_ylim3d([-1, 1])
-    # ax.set_zlim3d([-1, 1])
-    #
-    # plt.show()
-    #
-    #
-    # exit(0)
