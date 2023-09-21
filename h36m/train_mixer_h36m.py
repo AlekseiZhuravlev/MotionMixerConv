@@ -421,6 +421,8 @@ def test_angle(model, args):
 
     device = args.dev
     model.eval()
+
+    joint_angle_error_accum = 0
     accum_loss=0  
     n_batches=0 # number of batches for all the sequences
     actions=define_actions(args.actions_to_consider)
@@ -430,7 +432,6 @@ def test_angle(model, args):
 
     for action in actions:
 
-        joint_angle_error_running = 0
         running_loss=0
         n=0
         dataset_test = H36M_Dataset_Angle(args.data_dir,args.input_n,args.output_n,args.skip_rate, split=2,actions=[action])
@@ -457,15 +458,15 @@ def test_angle(model, args):
                 all_joints_seq[:,:,dim_used] = sequences_predict
                 loss=euler_error(all_joints_seq,sequences_gt)
 
-                joint_angle_error_running += joint_angle_error(all_joints_seq,sequences_gt) * batch_dim
+                joint_angle_error_accum += joint_angle_error(all_joints_seq,sequences_gt) * batch_dim
                 running_loss+=loss*batch_dim
                 accum_loss+=loss*batch_dim
 
         n_batches+=n
     print('overall average loss in euler angle is: '+str(accum_loss/n_batches))
-    print('joint angle error is:', joint_angle_error_running/n_batches)
+    print('joint angle error is:', joint_angle_error_accum/n_batches)
     
-    return accum_loss/n_batches, joint_angle_error_running/n_batches
+    return accum_loss/n_batches, joint_angle_error_accum/n_batches
 
 
 if __name__ == '__main__':

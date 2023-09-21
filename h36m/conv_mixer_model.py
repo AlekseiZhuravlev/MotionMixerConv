@@ -55,13 +55,15 @@ class MultiChanSELayer(nn.Module):
                     Output pose sequence of shape [batch_size, conv_nChan, in_nTP, dimPosEmb]
         """
         bs, _, in_nTP, _ = x.shape # [bs, conv_nChan, in_nTP, dimPosEmb]
-        
+
         ##### Squeeze #####
         y = x.transpose(1, 2) # [bs, in_nTP, conv_nChan, dimPosEmb]
         y = self.squeezeBlock(y) # [bs, in_nTP, 1, 1]
         y = y.view(bs, in_nTP) # [bs, in_nTP]
         
         ##### Excitation #####
+
+        # print(y.shape)
         y = self.excitationBlock(y) # [bs, in_nTP]
         y = y.view(bs, in_nTP, 1, 1) # [bs, in_nTP, 1, 1]
         y = y.transpose(1, 2) # [bs, 1, in_nTP, 1]

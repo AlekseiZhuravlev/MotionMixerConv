@@ -3,7 +3,7 @@ import torch
 import os
 
 import sys
-USER_NAME = 'v'
+USER_NAME = 'a'
 if USER_NAME == 'a':
     sys.path.append('/home/azhuavlev/PycharmProjects/MotionMixerConv')
 elif USER_NAME == 'v':
@@ -28,6 +28,7 @@ from torch.utils.tensorboard import SummaryWriter
 from conv_mixer.utils.visualization_helpers_h3m import visualize_batch
 
 import time
+import shutil
 
 import matplotlib as mpl
 mpl.use('Agg')
@@ -52,6 +53,8 @@ def train_autoregressive(model, model_name, args):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     else:
+        # shutil.rmtree(log_dir)
+        # os.makedirs(log_dir)
         time.sleep(5)
         raise ValueError('The directory already exists. Please, change the name of the model', log_dir)
 
@@ -109,44 +112,18 @@ def train_autoregressive(model, model_name, args):
         running_loss = 0
         n = 0
         model.train()
-        for cnt, batch in enumerate(data_loader):
+        for cnt, batch in enumerate(tqdm(data_loader)):
             batch = batch.to(device)
             batch_dim = batch.shape[0]
             n += batch_dim
 
             optimizer.zero_grad()
 
+            if epoch < args.n_epochs_teacher_forcing:
+                loss, _ = autoregressive_process_batch(batch, model, args, dim_used, teacher_forcing=True)
+            else:
+                loss, _ = autoregressive_process_batch(batch, model, args, dim_used, teacher_forcing=False)
 
-            #######################
-            # Autoregressive Code #
-            #######################
-            
-            # assert that args.output_n_dataset is "big enough"
-            assert args.output_n_dataset >= args.input_n_dataset - args.input_n_model 
-            loss = torch.zeros(1).to(device)
-
-            if args.loss_type == 'mpjpe':
-                full_sequences_train = batch[:, 0 : args.input_n_dataset, dim_used].view(-1, args.input_n_dataset, args.pose_dim)
-                full_sequences_gt = batch[:, args.input_n_dataset:args.input_n_dataset + args.output_n_dataset, dim_used].view(-1, args.output_n_dataset, args.pose_dim) # Shape [* , output_n_dataset, pose_dim]
-                normalize_factor = 1.0/1000.0
-                loss_fct = lambda pred, gt, out_n: mpjpe_error(pred, gt)
-            elif args.loss_type == 'angle':
-                full_sequences_train = batch[:, 0:args.input_n_dataset, dim_used].view(-1,args.input_n_dataset,len(dim_used))
-                full_sequences_gt = batch[:, args.input_n_dataset:args.input_n_dataset+args.output_n_dataset, dim_used] # Shape [* , output_n_dataset, len(dim_used)]
-                normalize_factor = 1.0
-                loss_fct = lambda pred, gt, out_n: torch.mean(torch.sum(torch.abs(pred.reshape(-1,out_n,len(dim_used)) - gt), dim=2).view(-1))
-                
-
-            for cumul_steps in range(0, args.input_n_dataset - args.input_n_model, args.output_n_model): 
-                # Apply Teacher forcing during training:
-                subsequence_train = normalize_factor * full_sequences_train[:, cumul_steps : cumul_steps + args.input_n_model, :]
-                subsequence_gt = full_sequences_gt[:, cumul_steps: cumul_steps + args.output_n_model, :]
-                subsequences_predict = model(subsequence_train) # predict next args.output_n_model steps
-                
-                # compute error with gt and sum the loss
-                loss += loss_fct(subsequences_predict, subsequence_gt, args.output_n_model)
-
-            # TODO: Aleksei: Check how the loss is calculated to make sure it's consistent
             loss.backward()
             if args.clip_grad is not None:
                 torch.nn.utils.clip_grad_norm_(
@@ -157,7 +134,14 @@ def train_autoregressive(model, model_name, args):
             running_loss += loss*batch_dim
 
         train_loss.append(running_loss.detach().cpu()/n)
+
+        ##############################################################
+        # Validation
+        ##############################################################
         model.eval()
+
+        print(">>>>>>>>>>> Validation <<<<<<<<<<<<")
+
         with torch.no_grad():
             running_loss = 0
             n = 0
@@ -165,33 +149,15 @@ def train_autoregressive(model, model_name, args):
                 batch = batch.to(device)
                 batch_dim = batch.shape[0]
                 n += batch_dim
-                assert args.output_n_dataset >= args.input_n_dataset - args.input_n_model, "Autoregression: Output of the Dataset is to small"
-                loss = torch.zeros(1).to(device)
 
-                if args.loss_type == 'mpjpe':
-                    full_sequences_eval = batch[:, 0 : args.input_n_dataset, dim_used].view(-1, args.input_n_dataset, args.pose_dim)
-                    full_sequences_gt = batch[:, args.input_n_dataset:args.input_n_dataset + args.output_n_dataset, dim_used].view(-1, args.output_n_dataset, args.pose_dim) # Shape [* , output_n_dataset, pose_dim]
-                    normalize_factor = 1.0/1000.0
-                    loss_fct = lambda pred, gt, out_n: mpjpe_error(pred, gt)
-                elif args.loss_type == 'angle':
-                    full_sequences_eval = batch[:, 0:args.input_n_dataset, dim_used].view(-1,args.input_n_dataset,len(dim_used))
-                    full_sequences_gt = batch[:, args.input_n_dataset:args.input_n_dataset+args.output_n_dataset, dim_used] # Shape [* , output_n_dataset, len(dim_used)]
-                    normalize_factor = 1.0
-                    loss_fct = lambda pred, gt, out_n: torch.mean(torch.sum(torch.abs(pred.reshape(-1,out_n,len(dim_used)) - gt), dim=2).view(-1))
-                    
-                subsequence_eval = normalize_factor * full_sequences_eval[:, :args.input_n_model, :]
-                elem_to_take = max(0, args.input_n_model - args.output_n_model) # 
-                for cumul_steps in range(0, args.output_n_dataset, args.output_n_model): 
-                    subsequence_gt = full_sequences_gt[:, cumul_steps: cumul_steps + args.output_n_model, :]
-                    subsequences_predict = model(subsequence_eval) # predict next args.output_n_model steps
-                    
-                    # compute error with gt and sum the loss
-                    loss += loss_fct(subsequences_predict, subsequence_gt, args.output_n_model)
-
-                    subsequence_eval = torch.cat((subsequence_eval[:, -elem_to_take:, :], subsequences_predict), dim=1)
-
+                loss, _ = autoregressive_process_batch(batch, model, args, dim_used, teacher_forcing=False)
                 running_loss += loss*batch_dim
+
+                # break
+
             val_loss.append(running_loss.detach().cpu()/n)
+
+
         if args.use_scheduler:
             scheduler.step()
 
@@ -226,7 +192,76 @@ def train_autoregressive(model, model_name, args):
     return train_loss, val_loss, test_loss, metrics
 
 
+def autoregressive_process_batch(batch, model, args, dim_used, teacher_forcing):
+    # assert that args.output_n_dataset divides by args.step_window and is >= 1
+    assert args.output_n_dataset % args.step_window == 0, "output_n_dataset does not divide by step_window"
+    assert args.output_n_dataset // args.step_window >= 1, "output_n_dataset is smaller than step_window"
+
+    # select loss function
+    if args.loss_type == 'mpjpe':
+        loss_fct = lambda pred, gt, out_n: mpjpe_error(pred, gt)
+    elif args.loss_type == 'angle':
+        loss_fct = lambda pred, gt, out_n: torch.mean(
+            torch.sum(torch.abs(pred.reshape(-1, out_n, len(dim_used)) - gt), dim=2).view(-1))
+
+    # select only used pose dimensions
+    full_sequence = batch[:, :args.input_n_dataset + args.output_n_dataset, dim_used].clone()
+    full_sequence_gt = batch[:, args.input_n_dataset:args.input_n_dataset + args.output_n_dataset, dim_used].clone()
+    full_sequence_predict = torch.zeros_like(full_sequence_gt)
+
+    # starting subsequence is the input data
+    subsequence_train = full_sequence[:, 0: args.input_n_model, :]
+
+    loss = torch.zeros(1, device=batch.device)
+
+    # iterative prediction
+    for start_frame_train in range(
+            0,
+            args.input_n_dataset + args.output_n_dataset - args.input_n_model - args.output_n_model + 1,
+            args.step_window
+    ):
+        end_frame_train = start_frame_train + args.input_n_model
+        end_frame_predict = end_frame_train + args.output_n_model
+
+        if teacher_forcing:
+            subsequence_train = full_sequence[:, start_frame_train: end_frame_train, :]
+
+        # get the subsequence to train on and the gt
+        subsequence_gt = full_sequence[:, end_frame_train: end_frame_predict, :]
+
+        # predict next args.output_n_model steps
+        subsequence_predict = model(subsequence_train)
+
+        loss += loss_fct(subsequence_predict, subsequence_gt, args.output_n_model)
+
+        # record the prediction
+        full_sequence_predict[:, end_frame_train - args.input_n_model: end_frame_predict - args.input_n_model,
+        :] = subsequence_predict.clone()
+
+        if not teacher_forcing:
+            # take last frames of input for the next iteration
+            frames_to_take = args.input_n_model - args.step_window
+            subsequence_reused = subsequence_train[:, -frames_to_take:, :]
+
+            # print('subsequence_train', subsequence_train, subsequence_train.shape)
+            # print('subsequence_reused', subsequence_reused, subsequence_reused.shape)
+            # print('subsequence_predict', subsequence_predict, subsequence_predict.shape)
+            # print('subsequence_gt', subsequence_gt, subsequence_gt.shape)
+
+
+            # add the predicted subsequence to input for the next iteration
+            subsequence_train = torch.cat((subsequence_reused, subsequence_predict), dim=1)
+
+    # assert that loss is not nan
+    assert not torch.isnan(loss), 'Loss is nan'
+
+    return loss / (args.output_n_dataset // args.step_window), full_sequence_predict
+
+
 def test_mpjpe_autoregressive(model, args, model_name, save_results):
+
+
+    print('>>>>>>>>>>> Testing <<<<<<<<<<<<')
 
     device = args.dev
     model.eval()
@@ -274,70 +309,38 @@ def test_mpjpe_autoregressive(model, args, model_name, save_results):
                 batch_dim = batch.shape[0]
                 n += batch_dim
 
-                print('Batch shape', batch.shape)
-                all_joints_input = batch.clone()[:, :args.input_n_dataset, :]
-                all_joints_seq = batch.clone()[:, args.input_n_dataset:args.input_n_dataset+args.output_n_dataset, :]
-                all_joints_seq_gt = batch.clone()[:, args.input_n_dataset:args.input_n_dataset+args.output_n_dataset, :] # Actually torch.zeros_like(batch[:,args...,:]) would do it as well
+                # create full sequences (without removing joints)
+                all_joints_input = batch[:, :args.input_n_dataset, :].clone()
+                all_joints_seq_gt = batch[:, args.input_n_dataset:args.input_n_dataset+args.output_n_dataset, :].clone()
+                all_joints_seq = all_joints_seq_gt.clone()
 
-                assert not args.delta_x
-                assert args.output_n_dataset >= args.input_n_dataset - args.input_n_model, "Autoregression: Output of the Dataset is to small"
-                loss = torch.zeros(1).to(device)
+                # ground truth with removed joints
+                full_sequence_gt = all_joints_seq_gt[:, :, dim_used]
 
-                full_sequences_test = batch[:, 0 : args.input_n_dataset, dim_used].view(-1, args.input_n_dataset, args.pose_dim)
-                full_sequences_gt = batch[:, args.input_n_dataset:args.input_n_dataset + args.output_n_dataset, dim_used].view(-1, args.output_n_dataset, args.pose_dim) # Shape [* , output_n_dataset, pose_dim]
-                full_sequences_predict = torch.zeros_like(full_sequences_gt)
+                # autoregressive
+                loss, full_sequence_predict = autoregressive_process_batch(batch, model, args, dim_used, teacher_forcing=False)
 
-                subsequence_test = full_sequences_test[:, :args.input_n_model, :] / 1000
-                elem_to_take = max(0, args.input_n_model - args.output_n_model) # 
-                for cumul_steps in range(0, args.input_n_dataset - args.input_n_model, args.output_n_model): 
-                    subsequence_gt = full_sequences_gt[:, cumul_steps: cumul_steps + args.output_n_model, :]
-                    subsequences_predict = model(subsequence_test) # predict next args.output_n_model steps
-                    full_sequences_predict[:, cumul_steps: cumul_steps + args.output_n_model, :] = subsequences_predict # Shape [* , output_n_dataset, pose_dim
+                # insert back skipped joints to prediction
+                all_joints_seq[:, :, dim_used] = full_sequence_predict
 
-                    # compute error with gt and sum the loss
-                    loss += mpjpe_error(subsequences_predict, subsequence_gt)
-
-                    subsequence_test = torch.cat((subsequence_test[:, -elem_to_take:, :], subsequences_predict), dim=1)
-
-                all_joints_input[:, :, dim_used] = full_sequences_test * 1000
-                all_joints_input[:, :, index_to_ignore] = all_joints_input[:, :, index_to_equal]
-
-                all_joints_seq[:, :, dim_used] = full_sequences_predict
-                all_joints_seq[:, :, index_to_ignore] = all_joints_seq[:, :, index_to_equal]
-
-                all_joints_seq_gt[:, :, dim_used] = full_sequences_gt
-                all_joints_seq_gt[:, :, index_to_ignore] = all_joints_seq_gt[:, :, index_to_equal]
-
-                print('all_joints_seq.shape', all_joints_seq.shape)
-                print('all_joints_seq_gt.shape', all_joints_seq_gt.shape)
-                loss = mpjpe_error(all_joints_seq.view(-1, args.output_n_dataset, 33, 3), # all_joints_seq.view(-1, args.output_n_dataset, 32, 3)
-                                   all_joints_seq_gt.view(-1, args.output_n_dataset, 33, 3) # all_joints_seq_gt.view(-1, args.output_n_dataset, 32, 3)
-                                   )
-
-                # print('sequences_predict.shape', sequences_predict.shape)
-                # print(sequences_predict)
-                #
-                # print('all_joints_seq.shape', all_joints_seq.shape)
-                # print(all_joints_seq)
-                # exit(0)
-
-                print('full_sequences_predict.shape', full_sequences_predict.shape)
-                print('full_sequences_gt.shape', full_sequences_gt.shape)
+                # auc_pck
                 auc_pck_batch = auc_pck_metric(
-                    full_sequences_predict.view(-1, args.output_n_dataset, 16, 3) / 1000, # full_sequences_predict.view(-1, args.output_n_dataset, 22, 3) / 1000,
-                    full_sequences_gt.view(-1, args.output_n_dataset, 16, 3) / 1000 # full_sequences_gt.view(-1, args.output_n_dataset, 22, 3) / 1000
+                    full_sequence_predict.view(-1, args.output_n_dataset, len(dim_used) // 3, 3) / 1000,
+                    full_sequence_gt.view(-1, args.output_n_dataset, len(dim_used) // 3, 3) / 1000
                 )
 
+                # accumulate metrics
                 auc_pck_accum += auc_pck_batch*batch_dim
-                running_loss += loss*batch_dim
-                accum_loss += loss*batch_dim
+                running_loss += loss * batch_dim
+                accum_loss += loss * batch_dim
+
+
+                # print('all_joints_seq', all_joints_seq)
+                # print('all_joints_seq_gt', all_joints_seq_gt)
+                # print('all_joints_input', all_joints_input)
+                # exit(0)
 
                 if save_results and cnt in sequences_to_save:
-
-                    # print('batch_full', all_joints_seq[10].cpu().shape)
-                    # print('batch_gt', all_joints_seq_gt[10].cpu().shape)
-                    # print('batch_train', all_joints_input[10].cpu().shape)
-
                     os.makedirs(os.path.join(args.save_path, model_name, 'visualization'), exist_ok=True)
                     visualize_batch(
                         batch_full=all_joints_seq[10].cpu(),
@@ -350,6 +353,7 @@ def test_mpjpe_autoregressive(model, args, model_name, save_results):
         # total_pck += auc_pck_running
     print('overall average loss in mm is: %f'%(accum_loss/n_batches))
     print('auc_pck is:', auc_pck_accum/n_batches)
+
     return accum_loss/n_batches, auc_pck_accum/n_batches
 
 
@@ -357,6 +361,8 @@ def test_angle_autoregressive(model, args):
 
     device = args.dev
     model.eval()
+
+    joint_angle_accum = 0
     accum_loss=0  
     n_batches=0 # number of batches for all the sequences
     actions=define_actions(args.actions_to_consider)
@@ -366,7 +372,7 @@ def test_angle_autoregressive(model, args):
 
     for action in actions:
 
-        joint_angle_error_running = 0
+        # joint_angle_error_running = 0
         running_loss=0
         n=0
         dataset_test = H36M_Dataset_Angle(args.data_dir,args.input_n_dataset,args.output_n_dataset,args.skip_rate, split=2,actions=[action])
@@ -383,39 +389,27 @@ def test_angle_autoregressive(model, args):
                 batch=batch.to(device)
                 batch_dim=batch.shape[0]
                 n+=batch_dim
-                
-                assert args.output_n_dataset >= args.input_n_dataset - args.input_n_model, "Autoregression: Output of the Dataset is to small"
-                loss = 0
 
-                full_sequences_test = batch[:, 0:args.input_n_dataset, dim_used].view(-1,args.input_n_dataset,len(dim_used))
-                full_sequences_gt = batch[:, args.input_n_dataset:args.input_n_dataset+args.output_n_dataset, :] # Shape [* , output_n_dataset, angle_nums]
-                all_joints_seq=batch.clone()[:, args.input_n_dataset : args.input_n_dataset + args.output_n_dataset, :] # [batch_size, args.output_n_dataset, angle_nums]
+                # create full sequences (without removing joints)
+                all_joints_input = batch[:, :args.input_n_dataset, :].clone()
+                all_joints_seq_gt = batch[:, args.input_n_dataset:args.input_n_dataset+args.output_n_dataset, :].clone()
+                all_joints_seq = all_joints_seq_gt.clone()
 
-                subsequence_test = full_sequences_test[:, :args.input_n_model, :]
-                elem_to_take_from_old_input = max(0, args.input_n_model - args.output_n_model) # 
-                for cumul_steps in range(0, args.input_n_dataset - args.input_n_model, args.output_n_model): 
-                    subsequence_gt = full_sequences_gt[:, cumul_steps: cumul_steps + args.output_n_model, :]
-                    subsequences_predict = model(subsequence_test) # predict next args.output_n_model steps
-                    
-                    # compute error with gt and sum the loss
-                    all_joints_subseq = all_joints_seq[:, cumul_steps: cumul_steps + args.output_n_model, :] 
-                    all_joints_subseq[:, :, dim_used] = subsequences_predict
-                    assert all_joints_subseq.shape == subsequence_gt.shape, "Shapes should be equal, but " +str(all_joints_subseq.shape) +" != " +str(subsequence_gt.shape)
-                    loss += euler_error(all_joints_subseq, subsequence_gt)
-                    joint_angle_error_running += joint_angle_error(all_joints_subseq, subsequence_gt) * batch_dim
+                # ground truth with removed joints
+                full_sequence_gt = all_joints_seq_gt[:, :, dim_used]
 
-                    # Setup next input (autoregressiveness)
-                    subsequence_test = torch.cat((subsequence_test[:, -elem_to_take_from_old_input:, :], subsequences_predict), dim=1)
-                # TODO: Check if joint_angle_error_running has to be devided by the number of for-loop-steps.
-                
-                running_loss+=loss*batch_dim
-                accum_loss+=loss*batch_dim
+                # autoregressive
+                loss, full_sequence_predict = autoregressive_process_batch(batch, model, args, dim_used, teacher_forcing=False)
+
+                joint_angle_accum += joint_angle_error(full_sequence_predict, full_sequence_gt) * batch_dim
+                running_loss += euler_error(full_sequence_predict, full_sequence_gt) * batch_dim
+                accum_loss += euler_error(full_sequence_predict, full_sequence_gt) * batch_dim
 
         n_batches+=n
     print('overall average loss in euler angle is: '+str(accum_loss/n_batches))
-    print('joint angle error is:', joint_angle_error_running/n_batches)
+    print('joint angle error is:', joint_angle_accum/n_batches)
     
-    return accum_loss/n_batches, joint_angle_error_running/n_batches
+    return accum_loss/n_batches, joint_angle_accum/n_batches
 
 
 if __name__ == '__main__':
@@ -447,10 +441,18 @@ if __name__ == '__main__':
         raise ValueError('User not defined')
 
 
+    ################################
+    # Autoregressive settings
+    ################################
+
     parser.add_argument('--input_n_model', type=int, default=10, help="number of model's input frames")
     parser.add_argument('--output_n_model', type=int, default=5, help="number of model's output frames")
-    parser.add_argument('--input_n_dataset', type=int, default=25, help="number of ds's input frames")
-    parser.add_argument('--output_n_dataset', type=int, default=15, help="number of ds's output frames")
+    parser.add_argument('--input_n_dataset', type=int, default=10, help="number of ds's input frames")
+    parser.add_argument('--output_n_dataset', type=int, default=25, help="number of ds's output frames")
+    parser.add_argument('--step_window', type=int, default=5, help="step size for the sliding window")
+
+    ###################################
+
     parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5], help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
     parser.add_argument('--num_worker', default=4, type=int, help='number of workers in the dataloader')
 
@@ -458,7 +460,7 @@ if __name__ == '__main__':
     parser.add_argument('--activation', default='mish', type=str, required=False) 
     parser.add_argument('--r_se', default=8, type=int, required=False)
 
-    parser.add_argument('--n_epochs', default=2, type=int, required=False)
+    parser.add_argument('--n_epochs', default=50, type=int, required=False)
     parser.add_argument('--batch_size', default=50, type=int, required=False)  
     parser.add_argument('--loader_shuffle', default=True, type=bool, required=False)
     parser.add_argument('--pin_memory', default=False, type=bool, required=False)
@@ -471,20 +473,19 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.1, help='gamma correction to the learning rate, after reaching the milestone epochs')
     parser.add_argument('--clip_grad', type=float, default=None, help='select max norm to clip gradients')
     parser.add_argument('--actions_to_consider', default='all', help='Actions to visualize.Choose either all or a list of actions')
-    parser.add_argument('--batch_size_test', type=int, default=256, help='batch size for the test set')
+    parser.add_argument('--batch_size_test', type=int, default=50, help='batch size for the test set')
     parser.add_argument('--visualize_from', type=str, default='test', choices=['train', 'val', 'test'], help='choose data split to visualize from(train-val-test)')
-    parser.add_argument('--loss_type', type=str, default='angle', choices=['mpjpe', 'angle'])
+    parser.add_argument('--loss_type', type=str, default='mpjpe', choices=['mpjpe', 'angle'])
     # parser.add_argument('--delta_x', type=bool, default=True, help='predicting the difference between 2 frames')
 
     args = parser.parse_args()
 
     if args.loss_type == 'mpjpe':
         parser_mpjpe = argparse.ArgumentParser(parents=[parser]) # Parameters for mpjpe
-        parser_mpjpe.add_argument('--hidden_dim', default=50, type=int, required=False)  
-        parser_mpjpe.add_argument('--num_blocks', default=4, type=int, required=False)  
-        parser_mpjpe.add_argument('--tokens_mlp_dim', default=20, type=int, required=False)
-        parser_mpjpe.add_argument('--channels_mlp_dim', default=50, type=int, required=False)  
-        parser_mpjpe.add_argument('--regularization', default=0.1, type=float, required=False)  
+        parser_mpjpe.add_argument('--hidden_dim', default=192, type=int, required=False)
+        parser_mpjpe.add_argument('--num_blocks', default=4, type=int, required=False)
+        parser_mpjpe.add_argument('--channels_mlp_dim', default=8, type=int, required=False)
+        parser_mpjpe.add_argument('--regularization', default=-1, type=float, required=False)
         parser_mpjpe.add_argument('--pose_dim', default=66, type=int, required=False)
         parser_mpjpe.add_argument('--delta_x', type=bool, default=False, help='predicting the difference between 2 frames')
         parser_mpjpe.add_argument('--lr', default=0.001, type=float, required=False)  
@@ -531,15 +532,15 @@ if __name__ == '__main__':
                  in_nTP=args.input_n_model,
                  out_nTP=args.output_n_model,
 
+                  encoder_n_harmonic_functions=0,
+                  encoder_omega0=0.1,
+
                  # out_nTP=args.output_n_frames_model = 5
-                 conv_nChan=1, # TODO: Implement arg-parsing
-                 conv1_kernel_shape=(1,3), # TODO: Implement arg-parsing
-                 conv1_stride=(1,1), # TODO: Implement arg-parsing
-                 conv1_padding=(0,1), # TODO: Implement arg-parsing
+                 conv_nChan=args.channels_mlp_dim, # TODO: Implement arg-parsing
+                 conv1_kernel_shape=(5,5), # TODO: Implement arg-parsing
+
                  mode_conv="twice", # TODO: Implement arg-parsing
-                 conv2_kernel_shape=None, # TODO: Implement arg-parsing
-                 conv2_stride=None, # TODO: Implement arg-parsing
-                 conv2_padding=None, # TODO: Implement arg-parsing
+
                  activation=args.activation,
                  regularization=args.regularization,  
                  use_se=True,
@@ -551,7 +552,7 @@ if __name__ == '__main__':
     print('total number of parameters of the network is: ' +
           str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
-    model_name = 'h36_3d_'+str(args.output_n_dataset)+'frames_ckpt'
+    model_name = 'h36_3d_'+str(args.output_n_dataset)+'frames_ckpt_TeacherForcing'
 
     train_output = train_autoregressive(model, model_name, args)
 
