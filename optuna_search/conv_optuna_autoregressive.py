@@ -15,7 +15,7 @@ elif USER_NAME == "v":
     sys.path.append('/home/user/bornhaup/FinalProject/MotionMixerConv')
 
 import h36m.train_autoreg_mixer_h36m as train_autoreg_mixer_h36m
-import h36m.train_mixer_ais as train_mixer_ais
+import h36m.train_autoreg_mixer_ais as train_autoreg_mixer_ais
 from h36m.conv_mixer_model import ConvMixer
 import shutil
 
@@ -70,7 +70,7 @@ class Objective:
         parser.add_argument('--input_n_dataset', type=int, default=10, help="number of ds's input frames")
         parser.add_argument('--output_n_dataset', type=int, default=25, help="number of ds's output frames")
         parser.add_argument('--step_window', type=int, default=5, help="step size for the sliding window")
-        parser.add_argument('--n_epochs_teacher_forcing', type=int, default=999, help="number of epochs to use teacher forcing")
+        parser.add_argument('--n_epochs_teacher_forcing', type=int, default=5, help="number of epochs to use teacher forcing")
 
         parser.add_argument('--skip_rate', type=int, default=1, choices=[1, 5],
                             help='rate of frames to skip,defaults=1 for H36M or 5 for AMASS/3DPW')
@@ -226,8 +226,6 @@ class Objective:
 
     def train_model_ais(self, args, trial, loss_type, pose_dim):
 
-        raise NotImplementedError()
-
         ############################################################################
         # Train with mpjpe loss
         ############################################################################
@@ -240,8 +238,8 @@ class Objective:
             # not optimizable
             dimPosIn=args.pose_dim,
             dimPosOut=args.pose_dim,
-            in_nTP=args.input_n,
-            out_nTP=args.output_n,
+            in_nTP=args.input_n_model,
+            out_nTP=args.output_n_model,
 
             # optimizable
             num_blocks=args.num_blocks,
@@ -251,7 +249,7 @@ class Objective:
             encoder_n_harmonic_functions=args.encoder_n_harmonic_functions,
             encoder_omega0=args.encoder_omega0,
 
-            mode_conv="once",
+            mode_conv="twice",
             activation=args.activation,
             regularization=args.regularization,
             use_se=True,
@@ -264,8 +262,8 @@ class Objective:
               str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
 
         model_name = f'ais_{args.loss_type}_' \
-                        f'input_n={args.input_n}_' \
-                        f'output_n={args.output_n}_' \
+                        f'input_n={args.input_n_model}_' \
+                        f'output_n={args.output_n_model}_' \
                         f'skip_rate={args.skip_rate}_' \
                         f'actions_to_consider={args.actions_to_consider}_' \
                         f'num_blocks={args.num_blocks}_' \
@@ -277,11 +275,11 @@ class Objective:
                      f'encoder_n_harmonic_functions={args.encoder_n_harmonic_functions}_' \
                      f'encoder_omega0={args.encoder_omega0}_'
 
-        train_loss_list, val_loss_list, test_loss_list, metrics_dict = train_mixer_ais.train(model, model_name, args)
+        train_loss_list, val_loss_list, test_loss_list, metrics_dict = train_autoreg_mixer_ais.train(model, model_name, args)
 
         # save gif of the predictions
         if args.loss_type == 'mpjpe':
-            train_mixer_ais.test_mpjpe(model, args, model_name, save_results=True)
+            train_autoreg_mixer_ais.test_mpjpe(model, args, model_name, save_results=True)
 
         # IMPORTANT: we will optimize val_loss, and report train_loss and test_loss
         trial.set_user_attr(f"train_loss_{loss_type}", train_loss_list[-1].item())
@@ -309,7 +307,7 @@ class Objective:
             print(f'evaluating metrics on action {action}')
 
             if args.loss_type == 'mpjpe':
-                action_mpjpe_loss, action_auc_pck = train_mixer_ais.test_mpjpe(model, args_action, model_name,
+                action_mpjpe_loss, action_auc_pck = train_autoreg_mixer_ais.test_mpjpe(model, args_action, model_name,
                                                                                 save_results=True)
                 trial.set_user_attr(f"{action}/mpjpe", action_mpjpe_loss.item())
                 trial.set_user_attr(f"{action}/auc_pck", action_auc_pck.item())
@@ -352,7 +350,7 @@ if __name__ == '__main__':
     else:
         raise ValueError('User not supported')
     # study_name = 'h36m_reg=-1_out_nTP=10_skip=1_onlyKernels_once'
-    study_name = 'h36m_twice_autoregressive_teacher999'
+    study_name = 'h36m_twice_autoregressive_teacher5'
     # study_name = 'h36m_mlp_twice'
 
     study_path = base_folder + '/' + study_name
