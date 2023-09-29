@@ -1,14 +1,14 @@
 
-<div align="center">
-
 # Convolutional Mixer
 
 Aleksei Zhuravlev and Valentin von Bornhaupt
 
-</div>
-<div align="right">
-<img src="MotionMixer.png" height="500px">
-</div>
+<table>
+  <tr>
+    <td><img src="visualization/best_model_h36m/walking_1_10.gif" width="320" height="240"><br />Human3.6m, 10 frames prediction</td>
+    <td><img src="visualization/best_model_ais_autoregressive/2021-08-04-singlePerson_001_20_10.gif" width="320" height="240"><br />AIS dataset, 25 frames autoregressive prediction</td>
+    </tr>
+</table>
 
 ## Project Structure
 
