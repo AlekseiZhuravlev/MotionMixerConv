@@ -3,7 +3,7 @@
 
 <div align="center">
   <b>Aleksei Zhuravlev and Valentin von Bornhaupt</b><br>
-  <b>University of Bonn</b>
+  <b><i>University of Bonn</i></b>
 </div>
 
 ## Visualization
